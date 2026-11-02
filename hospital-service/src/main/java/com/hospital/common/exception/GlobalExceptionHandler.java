@@ -4,14 +4,18 @@ import com.hospital.common.result.Result;
 import com.hospital.common.result.ResultCode;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * 全局异常处理，避免异常细节直接暴露给前端。
@@ -58,6 +62,15 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccessDeniedException.class)
     public Result<Void> handleAccessDenied(AccessDeniedException e) {
         return Result.fail(ResultCode.FORBIDDEN);
+    }
+
+    /**
+     * 路径不存在。不处理的话会落到兜底 Exception，被误报成“系统繁忙”。
+     */
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
+    public Result<Void> handleNotFound(Exception e) {
+        return Result.fail(ResultCode.NOT_FOUND);
     }
 
     @ExceptionHandler(Exception.class)

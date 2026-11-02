@@ -4,7 +4,7 @@ import lombok.Getter;
 
 /**
  * 业务返回码。
- * 分段约定：1xxx 参数、2xxx 业务、3xxx 权限、5xxx 系统。
+ * 分段约定：1xxx 参数、2xxx 业务、3xxx 权限、4xxx 资源、5xxx 系统。
  */
 @Getter
 public enum ResultCode {
@@ -33,6 +33,8 @@ public enum ResultCode {
 
     UNAUTHORIZED(3001, "未登录或登录已失效"),
     FORBIDDEN(3002, "没有权限访问该资源"),
+
+    NOT_FOUND(4004, "请求的接口或资源不存在"),
 
     SYSTEM_ERROR(5000, "系统繁忙，请稍后重试");
 

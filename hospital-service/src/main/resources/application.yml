@@ -34,6 +34,10 @@ hospital:
     secret: ${JWT_SECRET:hospital-registration-system-jwt-secret-key-change-me-in-production-2026}
     expire-hours: 2
     issuer: hospital-service
+  admin:
+    # 启动时若不存在该账号会自动创建管理员，生产环境务必用环境变量覆盖默认密码
+    username: ${ADMIN_USERNAME:admin}
+    password: ${ADMIN_PASSWORD:admin123}
 
 springdoc:
   api-docs:
