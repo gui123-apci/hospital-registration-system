@@ -1,0 +1,30 @@
+# Java / Maven
+**/target/
+*.class
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# 日志
+*.log
+logs/
+*.pid
+
+# 本地环境变量与私有配置
+.env
+.env.*
+!.env.example
+application-local.yml
+application-local.yaml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 前端（后续加入）
+node_modules/
+dist/
