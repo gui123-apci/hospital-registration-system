@@ -6,11 +6,11 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /**
- * 患者注册入参。
+ * 患者注册入参 DTO。
  * 当前设计用手机号作为登录名，所以只需要手机号 + 密码。
  */
 @Data
-public class RegisterRequest {
+public class RegisterDTO {
 
     @NotBlank(message = "手机号不能为空")
     @Pattern(regexp = "^1[3-9]\\d{9}$", message = "手机号格式不正确")

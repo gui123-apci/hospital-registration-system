@@ -36,10 +36,11 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableMethodSecurity
 public class SecurityConfig {
 
-    /** 无需登录即可访问的路径 */
+    /** 无需登录即可访问的路径（公开接口） */
     private static final String[] PUBLIC_URLS = {
             "/auth/login",
             "/auth/register",
+            "/department/list",
             "/doc.html",
             "/webjars/**",
             "/v3/api-docs/**",

@@ -1,4 +1,4 @@
-package com.hospital.dto.auth;
+package com.hospital.vo.auth;
 
 import com.hospital.common.enums.UserRole;
 import com.hospital.entity.User;
@@ -12,7 +12,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class UserInfoResponse {
+public class UserInfoVO {
 
     private Long id;
     private String username;
@@ -24,9 +24,9 @@ public class UserInfoResponse {
     /** 角色中文名，前端直接展示 */
     private String roleName;
 
-    public static UserInfoResponse from(User user) {
+    public static UserInfoVO from(User user) {
         UserRole userRole = UserRole.of(user.getRole());
-        return new UserInfoResponse(
+        return new UserInfoVO(
                 user.getId(),
                 user.getUsername(),
                 user.getPhone(),

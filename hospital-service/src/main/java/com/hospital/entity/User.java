@@ -1,13 +1,9 @@
 package com.hospital.entity;
 
-import com.baomidou.mybatisplus.annotation.FieldFill;
-import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-
-import java.time.LocalDateTime;
 
 /**
  * 用户账号，对应 tb_user。
@@ -29,7 +25,4 @@ public class User extends BaseEntity {
 
     /** 0患者 1管理员 2医生 */
     private Integer role;
-
-    @TableField(fill = FieldFill.INSERT_UPDATE)
-    private LocalDateTime updateTime;
 }

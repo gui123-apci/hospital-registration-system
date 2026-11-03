@@ -9,8 +9,8 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 实体基类：只放所有表都有的公共字段。
- * id 由数据库自增；createTime 插入时由 MyBatis-Plus 自动填充。
+ * 实体基类：所有表都有的公共字段。
+ * id 数据库自增；createTime / updateTime 由 MyBatis-Plus MetaObjectHandler 自动填充。
  */
 @Data
 public abstract class BaseEntity {
@@ -20,4 +20,7 @@ public abstract class BaseEntity {
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
+
+    @TableField(fill = FieldFill.INSERT_UPDATE)
+    private LocalDateTime updateTime;
 }

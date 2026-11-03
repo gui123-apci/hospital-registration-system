@@ -1,9 +1,9 @@
 package com.hospital.service;
 
-import com.hospital.dto.auth.LoginRequest;
-import com.hospital.dto.auth.LoginResponse;
-import com.hospital.dto.auth.RegisterRequest;
-import com.hospital.dto.auth.UserInfoResponse;
+import com.hospital.dto.auth.LoginDTO;
+import com.hospital.dto.auth.RegisterDTO;
+import com.hospital.vo.auth.LoginVO;
+import com.hospital.vo.auth.UserInfoVO;
 
 /**
  * 认证相关业务：注册、登录、获取当前登录用户。
@@ -11,11 +11,11 @@ import com.hospital.dto.auth.UserInfoResponse;
 public interface AuthService {
 
     /** 患者注册，登录名直接复用手机号 */
-    UserInfoResponse register(RegisterRequest request);
+    UserInfoVO register(RegisterDTO dto);
 
     /** 登录成功返回 JWT */
-    LoginResponse login(LoginRequest request);
+    LoginVO login(LoginDTO dto);
 
     /** 按用户主键查询最新用户信息，供 /auth/me 使用 */
-    UserInfoResponse currentUser(Long userId);
+    UserInfoVO currentUser(Long userId);
 }

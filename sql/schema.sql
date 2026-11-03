@@ -29,6 +29,7 @@ CREATE TABLE tb_patient (
     relation    TINYINT      DEFAULT 0 COMMENT '关系：0本人 1父母 2子女 3其他',
     phone       VARCHAR(11)  DEFAULT NULL COMMENT '联系电话',
     create_time DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (id),
     UNIQUE KEY uk_id_card (id_card),
     KEY idx_user_id (user_id)
@@ -40,6 +41,7 @@ CREATE TABLE tb_department (
     name        VARCHAR(32) NOT NULL COMMENT '科室名',
     description VARCHAR(255) DEFAULT NULL COMMENT '科室简介',
     create_time DATETIME    DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='科室表';
 
@@ -52,6 +54,7 @@ CREATE TABLE tb_doctor (
     intro         VARCHAR(255) DEFAULT NULL COMMENT '简介',
     user_id       BIGINT UNSIGNED DEFAULT NULL COMMENT '关联登录账号（医生角色），可为空',
     create_time   DATETIME    DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time   DATETIME    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (id),
     KEY idx_department_id (department_id),
     UNIQUE KEY uk_doctor_user (user_id)
@@ -69,6 +72,7 @@ CREATE TABLE tb_schedule (
     price         DECIMAL(10,2) DEFAULT 0 COMMENT '挂号费',
     status        TINYINT      DEFAULT 1 COMMENT '1可预约 0停诊',
     create_time   DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time   DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (id),
     UNIQUE KEY uk_doctor_date_slot (doctor_id, work_date, time_slot),
     KEY idx_doctor_date (doctor_id, work_date),
@@ -82,6 +86,7 @@ CREATE TABLE tb_number_source (
     source_no   INT          NOT NULL COMMENT '号序号',
     status      TINYINT      DEFAULT 0 COMMENT '0可用 1锁定 2已售出 3已就诊',
     create_time DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (id),
     UNIQUE KEY uk_schedule_source (schedule_id, source_no),
     KEY idx_schedule_status (schedule_id, status)
@@ -98,6 +103,7 @@ CREATE TABLE tb_order (
     amount        DECIMAL(10,2) DEFAULT 0 COMMENT '金额',
     status        TINYINT      DEFAULT 0 COMMENT '0待支付 1已支付 2已退号 3已就诊 4已取消 5爽约',
     create_time   DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '下单时间',
+    update_time   DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     pay_time      DATETIME     DEFAULT NULL COMMENT '支付时间',
     deadline_time DATETIME     DEFAULT NULL COMMENT '支付截止时间（超时释放）',
     sign_time     DATETIME     DEFAULT NULL COMMENT '到院签到时间',
@@ -120,6 +126,7 @@ CREATE TABLE tb_payment (
     status      TINYINT      DEFAULT 0 COMMENT '0待支付 1成功 2失败 3退款',
     pay_time    DATETIME     DEFAULT NULL COMMENT '支付时间',
     create_time DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (id),
     KEY idx_order_id (order_id),
     KEY idx_user_id (user_id)
@@ -136,6 +143,7 @@ CREATE TABLE tb_report (
     content     TEXT COMMENT '报告内容',
     report_time DATETIME     DEFAULT NULL COMMENT '报告时间',
     create_time DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (id),
     KEY idx_patient_id (patient_id),
     KEY idx_order_id (order_id)

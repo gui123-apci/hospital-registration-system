@@ -1,4 +1,4 @@
-package com.hospital.dto.auth;
+package com.hospital.vo.auth;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -11,7 +11,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class LoginResponse {
+public class LoginVO {
 
     private String token;
 
@@ -21,5 +21,5 @@ public class LoginResponse {
     /** token 有效期（秒） */
     private Long expiresIn;
 
-    private UserInfoResponse user;
+    private UserInfoVO user;
 }

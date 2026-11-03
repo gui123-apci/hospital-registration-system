@@ -13,6 +13,7 @@ public enum UserRole {
     ADMIN(1, "管理员"),
     DOCTOR(2, "医生");
 
+
     /** 数据库存储值 */
     private final Integer code;
 
