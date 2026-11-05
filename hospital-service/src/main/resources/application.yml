@@ -32,7 +32,8 @@ hospital:
   jwt:
     # 生产环境请通过环境变量 JWT_SECRET 覆盖
     secret: ${JWT_SECRET:hospital-registration-system-jwt-secret-key-change-me-in-production-2026}
-    expire-hours: 2
+    # 开发期放宽到 30 天免得反复登录；上线前改回 2
+    expire-hours: 720
     issuer: hospital-service
   admin:
     # 启动时若不存在该账号会自动创建管理员，生产环境务必用环境变量覆盖默认密码

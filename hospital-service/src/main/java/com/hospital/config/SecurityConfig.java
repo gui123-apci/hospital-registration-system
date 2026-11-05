@@ -104,8 +104,10 @@ public class SecurityConfig {
                         // 浏览器跨域预检请求直接放行
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(PUBLIC_URLS).permitAll()
+                        // 管理端：/admin/** 仅管理员
                         .requestMatchers("/admin/**").hasRole("ADMIN")
-                        .requestMatchers("/doctor/**").hasAnyRole("ADMIN", "DOCTOR")
+                        // 患者端医生列表和医生端接口：只要登录即可（患者/管理员/医生都能访问）
+                        .requestMatchers("/doctor/**").authenticated()
                         .anyRequest().authenticated())
                 // JWT 过滤器要排在用户名密码登录过滤器之前
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
