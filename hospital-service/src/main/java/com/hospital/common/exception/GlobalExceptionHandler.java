@@ -4,6 +4,7 @@ import com.hospital.common.result.Result;
 import com.hospital.common.result.ResultCode;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
@@ -16,6 +17,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * 全局异常处理，避免异常细节直接暴露给前端。
@@ -30,27 +34,30 @@ public class GlobalExceptionHandler {
         return Result.fail(e.getCode(), e.getMessage());
     }
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public Result<Void> handleMethodArgumentNotValid(MethodArgumentNotValidException e) {
-        FieldError fieldError = e.getBindingResult().getFieldError();
-        String message = fieldError == null ? ResultCode.PARAM_ERROR.getMsg() : fieldError.getDefaultMessage();
-        return Result.fail(ResultCode.PARAM_ERROR.getCode(), message);
-    }
-
-    @ExceptionHandler(BindException.class)
-    public Result<Void> handleBindException(BindException e) {
-        FieldError fieldError = e.getBindingResult().getFieldError();
-        String message = fieldError == null ? ResultCode.PARAM_ERROR.getMsg() : fieldError.getDefaultMessage();
-        return Result.fail(ResultCode.PARAM_ERROR.getCode(), message);
+    /**
+     * 参数校验失败。
+     * Spring 会把所有字段的违规一次性收进 BindingResult，这里全部拼出来返回，
+     * 避免用户改一个、再被下一个拦住，来回好几轮。
+     */
+    @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class})
+    public Result<Void> handleMethodArgumentNotValid(BindException e) {
+        String message = e.getBindingResult().getFieldErrors().stream()
+                .map(FieldError::getDefaultMessage)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.joining("；"));
+        return Result.fail(ResultCode.PARAM_ERROR.getCode(),
+                message.isBlank() ? ResultCode.PARAM_ERROR.getMsg() : message);
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
     public Result<Void> handleConstraintViolation(ConstraintViolationException e) {
         String message = e.getConstraintViolations().stream()
-                .findFirst()
                 .map(violation -> violation.getMessage())
-                .orElse(ResultCode.PARAM_ERROR.getMsg());
-        return Result.fail(ResultCode.PARAM_ERROR.getCode(), message);
+                .distinct()
+                .collect(Collectors.joining("；"));
+        return Result.fail(ResultCode.PARAM_ERROR.getCode(),
+                message.isBlank() ? ResultCode.PARAM_ERROR.getMsg() : message);
     }
 
     @ExceptionHandler({MethodArgumentTypeMismatchException.class, HttpMessageNotReadableException.class})
@@ -62,6 +69,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccessDeniedException.class)
     public Result<Void> handleAccessDenied(AccessDeniedException e) {
         return Result.fail(ResultCode.FORBIDDEN);
+    }
+
+    /**
+     * 数据库唯一键冲突（并发窗口里两个请求同时通过业务预查，后插入的被数据库拦下）。
+     * 不接的话会掉进兜底 Exception，用户看到"系统繁忙"，实际是"数据已存在"。
+     */
+    @ExceptionHandler(DuplicateKeyException.class)
+    public Result<Void> handleDuplicateKey(DuplicateKeyException e) {
+        log.warn("唯一键冲突: {}", e.getMessage());
+        return Result.fail(ResultCode.DATA_CONFLICT);
     }
 
     /**

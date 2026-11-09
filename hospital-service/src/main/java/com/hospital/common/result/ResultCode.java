@@ -29,7 +29,11 @@ public enum ResultCode {
     DOCTOR_IN_USE(2032, "医生存在排班，无法删除"),
 
     SCHEDULE_NOT_FOUND(2041, "排班不存在"),
-    SCHEDULE_IN_USE(2042, "排班已产生挂号单，无法删除"),
+    SCHEDULE_IN_USE(2042, "排班已产生挂号单或号源，无法删除"),
+    SCHEDULE_TIME_CONFLICT(2043, "该医生当天该时段已有排班"),
+    SCHEDULE_TOTAL_TOO_SMALL(2044, "放号总数不能小于已挂出的数量"),
+    SCHEDULE_SLOT_EXPIRED(2045, "该时段已开始，不能再放号"),
+    DATA_CONFLICT(2046, "数据已被他人修改或已存在，请刷新后重试"),
 
     UNAUTHORIZED(3001, "未登录或登录已失效"),
     FORBIDDEN(3002, "没有权限访问该资源"),

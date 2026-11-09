@@ -8,8 +8,10 @@ import com.hospital.common.result.ResultCode;
 import com.hospital.dto.doctor.DoctorCreateDTO;
 import com.hospital.dto.doctor.DoctorUpdateDTO;
 import com.hospital.entity.Doctor;
+import com.hospital.entity.Report;
 import com.hospital.mapper.DepartmentMapper;
 import com.hospital.mapper.DoctorMapper;
+import com.hospital.mapper.ReportMapper;
 import com.hospital.mapper.ScheduleMapper;
 import com.hospital.service.DoctorService;
 import com.hospital.vo.doctor.DoctorVO;
@@ -29,6 +31,7 @@ public class DoctorServiceImpl implements DoctorService {
     private final DoctorMapper doctorMapper;
     private final ScheduleMapper scheduleMapper;
     private final DepartmentMapper departmentMapper;
+    private final ReportMapper reportMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -91,11 +94,19 @@ public class DoctorServiceImpl implements DoctorService {
             throw new BusinessException(ResultCode.DOCTOR_NOT_FOUND);
         }
 
-        // 差异点：医生只被 tb_schedule 一张表引用（tb_doctor.user_id 是可空的一对一，不是外键）
+        // 差异点：医生被 tb_schedule 和 tb_report 两张表引用（tb_doctor.user_id 是可空的一对一，不是外键）
         Long scheduleCount = scheduleMapper.selectCount(
                 new LambdaQueryWrapper<com.hospital.entity.Schedule>()
                         .eq(com.hospital.entity.Schedule::getDoctorId, id));
         if (scheduleCount != null && scheduleCount > 0) {
+            throw new BusinessException(ResultCode.DOCTOR_IN_USE);
+        }
+
+        // 出过报告的医生不能删（报告是就诊历史凭证）
+        Long reportCount = reportMapper.selectCount(
+                new LambdaQueryWrapper<Report>()
+                        .eq(Report::getDoctorId, id));
+        if (reportCount != null && reportCount > 0) {
             throw new BusinessException(ResultCode.DOCTOR_IN_USE);
         }
 
@@ -127,7 +138,8 @@ public class DoctorServiceImpl implements DoctorService {
 
     @Override
     public PageResult<DoctorVO> page(long pageNum, long pageSize) {
-        Page<Doctor> page = doctorMapper.selectPage(new Page<>(pageNum, pageSize), null);
+        Page<Doctor> page = doctorMapper.selectPage(
+                new Page<>(Math.max(pageNum, 1), Math.min(Math.max(pageSize, 1), 100)), null);
         return PageResult.of(page, DoctorVO::from);
     }
 }

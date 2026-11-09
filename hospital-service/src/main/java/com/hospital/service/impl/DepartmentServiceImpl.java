@@ -109,7 +109,8 @@ public class DepartmentServiceImpl implements DepartmentService {
 
     @Override
     public PageResult<DepartmentVO> page(long pageNum, long pageSize) {
-        Page<Department> page = departmentMapper.selectPage(new Page<>(pageNum, pageSize), null);
+        Page<Department> page = departmentMapper.selectPage(
+                new Page<>(Math.max(pageNum, 1), Math.min(Math.max(pageSize, 1), 100)), null);
         return PageResult.of(page, DepartmentVO::from);
     }
 
