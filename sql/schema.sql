@@ -25,7 +25,7 @@ CREATE TABLE tb_patient (
     id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
     user_id     BIGINT UNSIGNED NOT NULL COMMENT '所属账号',
     name        VARCHAR(32)  NOT NULL COMMENT '就诊人姓名',
-    id_card     VARCHAR(18)  NOT NULL COMMENT '身份证号',
+    id_card     VARCHAR(18)  DEFAULT NULL COMMENT '身份证号（注册时未填，就诊人模块补全）',
     relation    TINYINT      DEFAULT 0 COMMENT '关系：0本人 1父母 2子女 3其他',
     phone       VARCHAR(11)  DEFAULT NULL COMMENT '联系电话',
     create_time DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -110,7 +110,7 @@ CREATE TABLE tb_order (
     PRIMARY KEY (id),
     UNIQUE KEY uk_order_no (order_no),
     KEY idx_user_id (user_id),
-    KEY idx_patient_schedule (patient_id, schedule_id),
+    UNIQUE KEY uk_patient_schedule (patient_id, schedule_id),
     KEY idx_schedule_id (schedule_id),
     KEY idx_status_deadline (status, deadline_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='挂号单表';

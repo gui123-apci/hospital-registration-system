@@ -2,6 +2,9 @@ package com.hospital.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.hospital.common.constant.RedisKeyConstants;
+import com.hospital.common.enums.ScheduleStatus;
+import com.hospital.common.enums.SourceStatus;
 import com.hospital.common.exception.BusinessException;
 import com.hospital.common.result.PageResult;
 import com.hospital.common.result.ResultCode;
@@ -16,18 +19,21 @@ import com.hospital.mapper.NumberSourceMapper;
 import com.hospital.mapper.OrderMapper;
 import com.hospital.mapper.ScheduleMapper;
 import com.hospital.service.ScheduleService;
+import com.hospital.util.SlotTimeUtil;
 import com.hospital.vo.schedule.ScheduleVO;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.util.List;
 
 /**
  * 排班业务实现。
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ScheduleServiceImpl implements ScheduleService {
@@ -36,16 +42,7 @@ public class ScheduleServiceImpl implements ScheduleService {
     private final DoctorMapper doctorMapper;
     private final NumberSourceMapper numberSourceMapper;
     private final OrderMapper orderMapper;
-
-    /**
-     * 各时段开始时刻，下标即 timeSlot：1上午 8:00、2下午 13:00、3晚间 18:00（下标 0 占位）。
-     */
-    private static final LocalTime[] SLOT_START = {
-            LocalTime.MIDNIGHT,
-            LocalTime.of(8, 0),
-            LocalTime.of(13, 0),
-            LocalTime.of(18, 0)
-    };
+    private final StringRedisTemplate stringRedisTemplate;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -56,7 +53,7 @@ public class ScheduleServiceImpl implements ScheduleService {
         }
 
         // 日期级注解只能拦"昨天"，拦不住"今天上午的号下午才放"，所以时刻判断放这里
-        if (isSlotExpired(dto.getWorkDate(), dto.getTimeSlot())) {
+        if (SlotTimeUtil.isExpired(dto.getWorkDate(), dto.getTimeSlot())) {
             throw new BusinessException(ResultCode.SCHEDULE_SLOT_EXPIRED);
         }
 
@@ -75,8 +72,17 @@ public class ScheduleServiceImpl implements ScheduleService {
         // 剩余号数初始等于放号总数，之后只能由挂号扣减
         schedule.setLeftNum(dto.getTotalNum());
         schedule.setPrice(dto.getPrice());
-        schedule.setStatus(dto.getStatus() == null ? 1 : dto.getStatus());
+        schedule.setStatus(dto.getStatus() == null ? ScheduleStatus.AVAILABLE.getCode() : dto.getStatus());
         scheduleMapper.insert(schedule);
+
+        // 放号时批量生成号源：一条排班 N 个号，号源跟着出生，号序 1~N 就是叫号顺序
+        for (int i = 1; i <= schedule.getTotalNum(); i++) {
+            NumberSource source = new NumberSource();
+            source.setScheduleId(schedule.getId());
+            source.setSourceNo(i);
+            source.setStatus(SourceStatus.AVAILABLE.getCode());
+            numberSourceMapper.insert(source);
+        }
 
         return ScheduleVO.from(schedule);
     }
@@ -93,7 +99,7 @@ public class ScheduleServiceImpl implements ScheduleService {
         Integer newSlot = dto.getTimeSlot() == null ? exist.getTimeSlot() : dto.getTimeSlot();
         // 日期或时段变了，才需要重新校验（排除自己）
         if (!newDate.equals(exist.getWorkDate()) || !newSlot.equals(exist.getTimeSlot())) {
-            if (isSlotExpired(newDate, newSlot)) {
+            if (SlotTimeUtil.isExpired(newDate, newSlot)) {
                 throw new BusinessException(ResultCode.SCHEDULE_SLOT_EXPIRED);
             }
             if (existsConflict(exist.getDoctorId(), newDate, newSlot, exist.getId())) {
@@ -103,11 +109,12 @@ public class ScheduleServiceImpl implements ScheduleService {
 
         // 已过期的排班不能被改回"可预约"：日期时段没变时上面的校验被跳过，这里补上，
         // 否则管理端会出现"今天上午已过却显示可预约"的记录
-        if (Integer.valueOf(1).equals(dto.getStatus()) && isSlotExpired(newDate, newSlot)) {
+        if (Integer.valueOf(ScheduleStatus.AVAILABLE.getCode()).equals(dto.getStatus()) && SlotTimeUtil.isExpired(newDate, newSlot)) {
             throw new BusinessException(ResultCode.SCHEDULE_SLOT_EXPIRED);
         }
 
         // 调整放号总数：已挂出 = 原总数 - 原剩余，新剩余 = 新总数 - 已挂出
+        boolean totalChanged = false;
         if (dto.getTotalNum() != null && !dto.getTotalNum().equals(exist.getTotalNum())) {
             int sold = exist.getTotalNum() - exist.getLeftNum();
             int newLeft = dto.getTotalNum() - sold;
@@ -116,6 +123,7 @@ public class ScheduleServiceImpl implements ScheduleService {
             }
             exist.setTotalNum(dto.getTotalNum());
             exist.setLeftNum(newLeft);
+            totalChanged = true;
         }
 
         exist.setWorkDate(newDate);
@@ -128,6 +136,13 @@ public class ScheduleServiceImpl implements ScheduleService {
         }
         scheduleMapper.updateById(exist);
 
+        // 放号总数变了，Redis 里的库存缓存必须失效，否则患者端约到的还是旧库存。
+        // Cache-Aside 标准动作：改库之后删缓存，下次读自动回填新值。
+        // Redis 删除失败不回滚数据库：删不掉只是缓存慢一步过期，账不会错
+        if (totalChanged) {
+            evictStockCache(exist.getId());
+        }
+
         return ScheduleVO.from(exist);
     }
 
@@ -138,16 +153,19 @@ public class ScheduleServiceImpl implements ScheduleService {
             throw new BusinessException(ResultCode.SCHEDULE_NOT_FOUND);
         }
 
-        // 差异点：两条引用路径——号源明细、挂号单
-        Long sourceCount = numberSourceMapper.selectCount(
-                new LambdaQueryWrapper<NumberSource>().eq(NumberSource::getScheduleId, id));
+        // 有挂号单就不能删；号源是排班的附属物（放号时生成），删排班时一起级联删除
         Long orderCount = orderMapper.selectCount(
                 new LambdaQueryWrapper<Order>().eq(Order::getScheduleId, id));
-        if ((sourceCount != null && sourceCount > 0) || (orderCount != null && orderCount > 0)) {
+        if (orderCount != null && orderCount > 0) {
             throw new BusinessException(ResultCode.SCHEDULE_IN_USE);
         }
 
+        numberSourceMapper.delete(new LambdaQueryWrapper<NumberSource>()
+                .eq(NumberSource::getScheduleId, id));
         scheduleMapper.deleteById(id);
+
+        // 删排班时清掉 Redis 库存缓存，防止 key 残留成垃圾
+        evictStockCache(id);
     }
 
     @Override
@@ -171,7 +189,7 @@ public class ScheduleServiceImpl implements ScheduleService {
         LambdaQueryWrapper<Schedule> wrapper = new LambdaQueryWrapper<Schedule>()
                 .eq(Schedule::getDoctorId, doctorId)
                 // 停诊不展示：展示出来患者点了也挂不上
-                .eq(Schedule::getStatus, 1)
+                .eq(Schedule::getStatus, ScheduleStatus.AVAILABLE.getCode())
                 // 过期不展示：只给今天及以后
                 .ge(Schedule::getWorkDate, today)
                 .le(Schedule::getWorkDate, today.plusDays(effectiveDays - 1L))
@@ -179,7 +197,7 @@ public class ScheduleServiceImpl implements ScheduleService {
                 .orderByAsc(Schedule::getTimeSlot);
         // 今天已过的时段不再展示，和"过点不许放号"保持同一套判断
         return scheduleMapper.selectList(wrapper).stream()
-                .filter(schedule -> !isSlotExpired(schedule.getWorkDate(), schedule.getTimeSlot()))
+                .filter(schedule -> !SlotTimeUtil.isExpired(schedule.getWorkDate(), schedule.getTimeSlot()))
                 .map(ScheduleVO::from)
                 .toList();
     }
@@ -199,23 +217,6 @@ public class ScheduleServiceImpl implements ScheduleService {
     }
 
     /**
-     * 该排班时段是否已经过了：日期已过，或者就是今天但时段开始时刻已到。
-     * workDate 精确到天，所以"今天上午"只能在运行时用时刻判断。
-     */
-    private boolean isSlotExpired(LocalDate workDate, Integer timeSlot) {
-        LocalDate today = LocalDate.now();
-        if (workDate.isBefore(today)) {
-            return true;
-        }
-        // 脏数据防御：数据库 time_slot 没有 CHECK 约束，越界值按"已过期"处理，
-        // 避免数组越界抛系统异常，也避免 time_slot=0 被当成永不过期
-        if (timeSlot == null || timeSlot < 1 || timeSlot > 3) {
-            return true;
-        }
-        return workDate.isEqual(today) && !LocalTime.now().isBefore(SLOT_START[timeSlot]);
-    }
-
-    /**
      * 同一医生、同一天、同一时段是否已有排班。
      *
      * @param excludeId 更新时传自己的 id，把自身排除掉
@@ -230,5 +231,17 @@ public class ScheduleServiceImpl implements ScheduleService {
         }
         Long count = scheduleMapper.selectCount(wrapper);
         return count != null && count > 0;
+    }
+
+    /**
+     * 删除 Redis 里的排班库存缓存。失败只记日志不抛异常：
+     * 缓存删不掉的后果是短暂读到旧库存，数据库兜底不会让账出错。
+     */
+    private void evictStockCache(Long scheduleId) {
+        try {
+            stringRedisTemplate.delete(RedisKeyConstants.STOCK_PREFIX + scheduleId);
+        } catch (Exception e) {
+            log.warn("删除 Redis 库存缓存失败, scheduleId={}", scheduleId, e);
+        }
     }
 }

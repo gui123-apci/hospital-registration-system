@@ -6,7 +6,9 @@ import com.hospital.common.exception.BusinessException;
 import com.hospital.common.result.ResultCode;
 import com.hospital.dto.auth.LoginDTO;
 import com.hospital.dto.auth.RegisterDTO;
+import com.hospital.entity.Patient;
 import com.hospital.entity.User;
+import com.hospital.mapper.PatientMapper;
 import com.hospital.mapper.UserMapper;
 import com.hospital.security.LoginUser;
 import com.hospital.service.AuthService;
@@ -34,6 +36,8 @@ public class AuthServiceImpl implements AuthService {
 
     private final UserMapper userMapper;
 
+    private final PatientMapper patientMapper;
+
     private final PasswordEncoder passwordEncoder;
 
     private final AuthenticationManager authenticationManager;
@@ -57,6 +61,14 @@ public class AuthServiceImpl implements AuthService {
         // 自助注册只能是患者，管理员/医生由后台创建
         user.setRole(UserRole.PATIENT.getCode());
         userMapper.insert(user);
+
+        // 注册即建一个"本人"就诊人：姓名先用手机号占位，身份证号注册时拿不到，就诊人模块再补
+        Patient patient = new Patient();
+        patient.setUserId(user.getId());
+        patient.setName(dto.getPhone());
+        patient.setRelation(0);
+        patient.setPhone(dto.getPhone());
+        patientMapper.insert(patient);
 
         log.info("患者注册成功: userId={}, username={}", user.getId(), user.getUsername());
         return UserInfoVO.from(user);
