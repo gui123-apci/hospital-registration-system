@@ -100,14 +100,19 @@ public class OrderServiceImpl implements OrderService {
         String stockKey = RedisKeyConstants.STOCK_PREFIX + dto.getScheduleId();
         boolean redisDeducted = false;
         try {
-            stringRedisTemplate.opsForValue().setIfAbsent(stockKey, String.valueOf(schedule.getLeftNum()));
+            // 懒加载回填 + TTL：key 到期自动消失，下次回填数据库真值——偏差最多存活 1 小时，自愈
+            stringRedisTemplate.opsForValue().setIfAbsent(stockKey,
+                    String.valueOf(schedule.getLeftNum()), RedisKeyConstants.STOCK_KEY_TTL);
             Long remain = stringRedisTemplate.execute(stockDeductScript, List.of(stockKey));
             if (remain != null && remain >= 0) {
                 redisDeducted = true;
-            } else if (remain != null) {
+            } else if (remain != null && remain == -1) {
                 // Lua 判定库存不足，快速失败，不碰数据库
                 log.warn("Redis 库存不足快速失败, scheduleId={}, patientId={}", dto.getScheduleId(), dto.getPatientId());
                 throw new BusinessException(ResultCode.SCHEDULE_SOLD_OUT);
+            } else if (remain != null) {
+                // -2：缓存缺失（key 被删/TTL 过期/Redis 重启），库里可能还有号，走数据库兜底
+                log.warn("Redis 缓存缺失，降级走数据库兜底, scheduleId={}", dto.getScheduleId());
             } else {
                 // Lua 无返回值（异常情况）：记日志，继续走数据库兜底
                 log.warn("Lua 扣减无返回值，降级走数据库兜底, scheduleId={}", dto.getScheduleId());

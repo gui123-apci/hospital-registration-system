@@ -29,11 +29,16 @@ public final class SlotTimeUtil {
      * 脏数据防御：timeSlot 越界（无 CHECK 约束）按"已过期"处理，避免数组越界。
      */
     public static boolean isExpired(LocalDate workDate, Integer timeSlot) {
+        // workDate 为 null 直接按已过期处理：DTO 的 @NotNull 拦正常入口，这里是脏数据兜底
+        if (workDate == null) {
+            return true;
+        }
         LocalDate today = LocalDate.now();
         if (workDate.isBefore(today)) {
             return true;
         }
-        if (timeSlot == null || timeSlot < 1 || timeSlot > 3) {
+        // 上界用数组长度推导而不是魔法数字 3：将来加第 4 个时段只改 SLOT_START，这里自动跟上
+        if (timeSlot == null || timeSlot < 1 || timeSlot > SLOT_START.length - 1) {
             return true;
         }
         return workDate.isEqual(today) && !LocalTime.now().isBefore(SLOT_START[timeSlot]);
