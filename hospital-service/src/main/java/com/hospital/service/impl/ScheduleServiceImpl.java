@@ -2,7 +2,6 @@ package com.hospital.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.hospital.common.constant.RedisKeyConstants;
 import com.hospital.common.enums.ScheduleStatus;
 import com.hospital.common.enums.SourceStatus;
 import com.hospital.common.exception.BusinessException;
@@ -20,6 +19,7 @@ import com.hospital.mapper.OrderMapper;
 import com.hospital.mapper.ScheduleMapper;
 import com.hospital.service.ScheduleService;
 import com.hospital.util.SlotTimeUtil;
+import com.hospital.util.StockCacheUtil;
 import com.hospital.vo.schedule.ScheduleVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -138,9 +138,9 @@ public class ScheduleServiceImpl implements ScheduleService {
 
         // 放号总数变了，Redis 里的库存缓存必须失效，否则患者端约到的还是旧库存。
         // Cache-Aside 标准动作：改库之后删缓存，下次读自动回填新值。
-        // Redis 删除失败不回滚数据库：删不掉只是缓存慢一步过期，账不会错
+        // 事务提交后再删（StockCacheUtil 内部注册 afterCommit），避免并发回填旧值
         if (totalChanged) {
-            evictStockCache(exist.getId());
+            StockCacheUtil.evictAfterCommit(stringRedisTemplate, exist.getId());
         }
 
         return ScheduleVO.from(exist);
@@ -165,7 +165,7 @@ public class ScheduleServiceImpl implements ScheduleService {
         scheduleMapper.deleteById(id);
 
         // 删排班时清掉 Redis 库存缓存，防止 key 残留成垃圾
-        evictStockCache(id);
+        StockCacheUtil.evictAfterCommit(stringRedisTemplate, id);
     }
 
     @Override
@@ -231,17 +231,5 @@ public class ScheduleServiceImpl implements ScheduleService {
         }
         Long count = scheduleMapper.selectCount(wrapper);
         return count != null && count > 0;
-    }
-
-    /**
-     * 删除 Redis 里的排班库存缓存。失败只记日志不抛异常：
-     * 缓存删不掉的后果是短暂读到旧库存，数据库兜底不会让账出错。
-     */
-    private void evictStockCache(Long scheduleId) {
-        try {
-            stringRedisTemplate.delete(RedisKeyConstants.STOCK_PREFIX + scheduleId);
-        } catch (Exception e) {
-            log.warn("删除 Redis 库存缓存失败, scheduleId={}", scheduleId, e);
-        }
     }
 }

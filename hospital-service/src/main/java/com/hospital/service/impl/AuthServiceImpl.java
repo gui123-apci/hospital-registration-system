@@ -1,6 +1,7 @@
 package com.hospital.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.hospital.common.enums.Relation;
 import com.hospital.common.enums.UserRole;
 import com.hospital.common.exception.BusinessException;
 import com.hospital.common.result.ResultCode;
@@ -66,7 +67,7 @@ public class AuthServiceImpl implements AuthService {
         Patient patient = new Patient();
         patient.setUserId(user.getId());
         patient.setName(dto.getPhone());
-        patient.setRelation(0);
+        patient.setRelation(Relation.SELF.getCode());
         patient.setPhone(dto.getPhone());
         patientMapper.insert(patient);
 

@@ -23,6 +23,7 @@ import com.hospital.mapper.ScheduleMapper;
 import com.hospital.service.OrderService;
 import com.hospital.util.RedisIdWorker;
 import com.hospital.util.SlotTimeUtil;
+import com.hospital.util.StockCacheUtil;
 import com.hospital.vo.order.OrderVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -87,10 +88,12 @@ public class OrderServiceImpl implements OrderService {
             throw new BusinessException(ResultCode.SCHEDULE_SLOT_EXPIRED);
         }
 
-        // 3. 一人一单预查：给可读提示；真正兜底靠 uk_patient_schedule 唯一键
+        // 3. 一人一单预查：给可读提示；真正兜底靠 uk_patient_schedule 唯一键。
+        //    只数 active_flag=1 的有效单：退号/超时的历史单已置 NULL 让位，不能挡住重新挂号
         Long exist = orderMapper.selectCount(new LambdaQueryWrapper<Order>()
                 .eq(Order::getPatientId, dto.getPatientId())
-                .eq(Order::getScheduleId, dto.getScheduleId()));
+                .eq(Order::getScheduleId, dto.getScheduleId())
+                .eq(Order::getActiveFlag, 1));
         if (exist != null && exist > 0) {
             throw new BusinessException(ResultCode.ORDER_DUPLICATE);
         }
@@ -201,6 +204,7 @@ public class OrderServiceImpl implements OrderService {
         order.setSourceId(source.getId());
         order.setAmount(schedule.getPrice());
         order.setStatus(OrderStatus.WAIT_PAY.getCode());
+        order.setActiveFlag(1);
         order.setDeadlineTime(LocalDateTime.now().plusMinutes(OrderConstants.PAY_TIMEOUT_MINUTES));
         try {
             orderMapper.insert(order);
@@ -230,5 +234,71 @@ public class OrderServiceImpl implements OrderService {
         } catch (DataAccessException e) {
             log.error("Redis 库存回补失败, stockKey={}", stockKey, e);
         }
+    }
+
+    @Override
+    public List<Long> listExpiredWaitPayOrderIds(int limit) {
+        // 只查 id 列 + LIMIT 分批：超时单可能积压（服务重启/放量大），
+        // 一次全捞会单轮跑很久，号一直被占着别人挂不上
+        return orderMapper.selectList(new LambdaQueryWrapper<Order>()
+                        .eq(Order::getStatus, OrderStatus.WAIT_PAY.getCode())
+                        .lt(Order::getDeadlineTime, LocalDateTime.now())
+                        .select(Order::getId)
+                        .last("LIMIT " + limit))
+                .stream()
+                .map(Order::getId)
+                .toList();
+    }
+
+    /**
+     * 释放单个超时订单。给定时任务逐条调用，每条一个事务，一条失败不影响其他。
+     *
+     * 关键在"条件 UPDATE 抢取消权"：WHERE status=0 才改。定时任务扫出来到执行之间，
+     * 用户可能恰好支付成功了（status 已变 1），这时 UPDATE 影响 0 行，本方法直接撒手，
+     * 不会把"已支付的号"再释放掉。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void releaseExpiredOrder(Long orderId) {
+        Order order = orderMapper.selectById(orderId);
+        if (order == null || !Integer.valueOf(OrderStatus.WAIT_PAY.getCode()).equals(order.getStatus())) {
+            return;
+        }
+
+        // 抢取消权 + 唯一键让位：active_flag 置 NULL，让同一就诊人还能再挂同一排班
+        int rows = orderMapper.update(null, new LambdaUpdateWrapper<Order>()
+                .eq(Order::getId, orderId)
+                .eq(Order::getStatus, OrderStatus.WAIT_PAY.getCode())
+                .set(Order::getStatus, OrderStatus.CANCELED.getCode())
+                .set(Order::getActiveFlag, null));
+        if (rows == 0) {
+            // 已被支付或已被其他线程释放，幂等跳过
+            return;
+        }
+
+        // 号源回可用：锁定(1) → 可用(0)。必须查影响行数：0 行说明号源状态和预期不符
+        // （脏数据/已被人工改动），这时库存已 +1 而号没回来，账就不平了——抛异常回滚整个事务，
+        // 让定时任务下轮重试并靠日志报警，比静默吞掉好
+        int sourceRows = numberSourceMapper.update(null, new LambdaUpdateWrapper<NumberSource>()
+                .eq(NumberSource::getId, order.getSourceId())
+                .eq(NumberSource::getStatus, SourceStatus.LOCKED.getCode())
+                .set(NumberSource::getStatus, SourceStatus.AVAILABLE.getCode()));
+        if (sourceRows == 0) {
+            log.error("超时释放号源回补失败(状态与预期不符), orderId={}, sourceId={}",
+                    orderId, order.getSourceId());
+            throw new BusinessException(ResultCode.SYSTEM_ERROR);
+        }
+
+        // 库存回补：数据库 +1
+        scheduleMapper.update(null, new LambdaUpdateWrapper<Schedule>()
+                .eq(Schedule::getId, order.getScheduleId())
+                .setSql("left_num = left_num + 1"));
+
+        // Redis 缓存作废：事务提交后再删（StockCacheUtil 内部注册 afterCommit），
+        // 避免并发请求在提交前回填旧值导致少卖
+        StockCacheUtil.evictAfterCommit(stringRedisTemplate, order.getScheduleId());
+
+        log.info("超时订单已释放, orderId={}, scheduleId={}, sourceId={}",
+                orderId, order.getScheduleId(), order.getSourceId());
     }
 }

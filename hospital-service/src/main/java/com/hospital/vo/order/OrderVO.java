@@ -1,5 +1,6 @@
 package com.hospital.vo.order;
 
+import com.hospital.common.enums.OrderStatus;
 import com.hospital.entity.Order;
 import com.hospital.entity.Patient;
 import com.hospital.entity.Schedule;
@@ -39,6 +40,9 @@ public class OrderVO {
     /** 0待支付 1已支付 2已退号 3已就诊 4已取消 5爽约 */
     private Integer status;
 
+    /** 状态中文描述，前端直接展示，不用自己映射数字 */
+    private String statusDesc;
+
     private LocalDateTime deadlineTime;
 
     private LocalDateTime createTime;
@@ -54,6 +58,8 @@ public class OrderVO {
         vo.setTimeSlot(schedule != null ? schedule.getTimeSlot() : null);
         vo.setAmount(order.getAmount());
         vo.setStatus(order.getStatus());
+        OrderStatus status = OrderStatus.of(order.getStatus());
+        vo.setStatusDesc(status == null ? null : status.getDesc());
         vo.setDeadlineTime(order.getDeadlineTime());
         vo.setCreateTime(order.getCreateTime());
         return vo;

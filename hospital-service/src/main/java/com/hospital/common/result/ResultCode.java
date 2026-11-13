@@ -20,6 +20,8 @@ public enum ResultCode {
     PATIENT_NOT_FOUND(2011, "就诊人不存在"),
     PATIENT_NOT_OWNED(2012, "无权操作该就诊人"),
     ID_CARD_EXISTS(2013, "该身份证已添加为就诊人"),
+    PATIENT_LIMIT_EXCEEDED(2014, "就诊人数量已达上限（20 个）"),
+    PATIENT_SELF_DUPLICATED(2015, "本人信息已存在，无需重复添加"),
 
     DEPARTMENT_NOT_FOUND(2021, "科室不存在"),
     DEPARTMENT_NAME_EXISTS(2022, "科室名称已存在"),
@@ -38,6 +40,12 @@ public enum ResultCode {
     SCHEDULE_SOLD_OUT(2051, "该时段号源已约满"),
     SCHEDULE_NOT_AVAILABLE(2052, "该排班当前不可预约"),
     ORDER_DUPLICATE(2053, "该就诊人已预约过该排班，请勿重复挂号"),
+    ORDER_NOT_FOUND(2054, "订单不存在"),
+    ORDER_NOT_OWNED(2055, "无权操作该订单"),
+    ORDER_STATUS_ERROR(2056, "订单状态不允许该操作"),
+    ORDER_TIMEOUT(2057, "订单已超时，请重新挂号"),
+    PAYMENT_NOT_FOUND(2058, "支付单不存在"),
+    REFUND_NOT_ALLOWED(2059, "就诊时段已开始或已过，无法退号"),
 
     UNAUTHORIZED(3001, "未登录或登录已失效"),
     FORBIDDEN(3002, "没有权限访问该资源"),

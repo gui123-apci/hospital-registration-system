@@ -37,4 +37,11 @@ public class Order extends BaseEntity {
 
     /** 到院签到时间 */
     private LocalDateTime signTime;
+
+    /**
+     * 有效标记：下单填 1，退号/超时释放置 NULL。
+     * 配合唯一键 uk_patient_schedule(patient_id, schedule_id, active_flag) 实现"一人一单让位"：
+     * MySQL 唯一索引不比较 NULL，置 NULL 后该行不再占用唯一键位，同一就诊人可再次挂同一排班。
+     */
+    private Integer activeFlag;
 }

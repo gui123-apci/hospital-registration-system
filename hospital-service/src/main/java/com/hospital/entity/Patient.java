@@ -6,7 +6,8 @@ import lombok.EqualsAndHashCode;
 
 /**
  * 就诊人，对应 tb_patient。
- * 一个账号可以添加多个家人，身份证号全局唯一。
+ * 一个账号可以添加多个家人；身份证号在账号内唯一（uk_user_id_card）——
+ * 不同账号可以各自添加同一个家人（如父母都给孩子建档），所以不是全局唯一。
  */
 @Data
 @EqualsAndHashCode(callSuper = true)

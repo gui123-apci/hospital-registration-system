@@ -31,8 +31,8 @@ CREATE TABLE tb_patient (
     create_time DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (id),
-    UNIQUE KEY uk_id_card (id_card),
-    KEY idx_user_id (user_id)
+    KEY idx_user_id (user_id),
+    UNIQUE KEY uk_user_id_card (user_id, id_card)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='就诊人表';
 
 -- ============ 3. 科室 ============
@@ -107,10 +107,11 @@ CREATE TABLE tb_order (
     pay_time      DATETIME     DEFAULT NULL COMMENT '支付时间',
     deadline_time DATETIME     DEFAULT NULL COMMENT '支付截止时间（超时释放）',
     sign_time     DATETIME     DEFAULT NULL COMMENT '到院签到时间',
+    active_flag  TINYINT      DEFAULT NULL COMMENT '有效标记：下单=1，退号/超时置NULL让唯一键让位',
     PRIMARY KEY (id),
     UNIQUE KEY uk_order_no (order_no),
     KEY idx_user_id (user_id),
-    UNIQUE KEY uk_patient_schedule (patient_id, schedule_id),
+    UNIQUE KEY uk_patient_schedule (patient_id, schedule_id, active_flag),
     KEY idx_schedule_id (schedule_id),
     KEY idx_status_deadline (status, deadline_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='挂号单表';
@@ -128,7 +129,7 @@ CREATE TABLE tb_payment (
     create_time DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (id),
-    KEY idx_order_id (order_id),
+    UNIQUE KEY uk_order_id (order_id),
     KEY idx_user_id (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='支付单表';
 

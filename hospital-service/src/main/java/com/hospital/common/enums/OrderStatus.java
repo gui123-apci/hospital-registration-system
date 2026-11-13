@@ -23,4 +23,17 @@ public enum OrderStatus {
         this.code = code;
         this.desc = desc;
     }
+
+    /** 按 code 反查枚举，脏数据（不认识的 code）返回 null，由调用方决定兜底 */
+    public static OrderStatus of(Integer code) {
+        if (code == null) {
+            return null;
+        }
+        for (OrderStatus status : values()) {
+            if (status.code == code) {
+                return status;
+            }
+        }
+        return null;
+    }
 }
