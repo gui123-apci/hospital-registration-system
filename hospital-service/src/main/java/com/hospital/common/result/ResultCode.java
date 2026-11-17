@@ -47,6 +47,13 @@ public enum ResultCode {
     PAYMENT_NOT_FOUND(2058, "支付单不存在"),
     REFUND_NOT_ALLOWED(2059, "就诊时段已开始或已过，无法退号"),
 
+    SIGN_NOT_ALLOWED(2060, "当前不在可签到时间"),
+    SIGN_DUPLICATED(2061, "请勿重复签到"),
+    DOCTOR_NOT_BOUND(2062, "当前账号未绑定医生"),
+    SCHEDULE_NOT_OWNED(2063, "无权操作该排班"),
+    NO_WAITING_PATIENT(2064, "当前无待就诊患者"),
+    REPORT_NOT_ALLOWED(2065, "订单尚未就诊完成，无法开具报告"),
+
     UNAUTHORIZED(3001, "未登录或登录已失效"),
     FORBIDDEN(3002, "没有权限访问该资源"),
 

@@ -47,4 +47,12 @@ public class OrderController {
                                                 @AuthenticationPrincipal LoginUser loginUser) {
         return Result.success(orderService.pageMine(pageNum, pageSize, loginUser.getUserId()));
     }
+
+    @Operation(summary = "到院签到", description = "就诊日当天、时段结束前签到，防重复")
+    @PostMapping("/sign")
+    public Result<Void> sign(@RequestParam Long orderId,
+                             @AuthenticationPrincipal LoginUser loginUser) {
+        orderService.sign(orderId, loginUser.getUserId());
+        return Result.success("签到成功", null);
+    }
 }

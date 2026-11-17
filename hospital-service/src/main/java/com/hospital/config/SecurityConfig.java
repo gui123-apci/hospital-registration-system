@@ -108,6 +108,8 @@ public class SecurityConfig {
                         .requestMatchers("/admin/**").hasRole("ADMIN")
                         // 患者端医生列表和医生端接口：只要登录即可（患者/管理员/医生都能访问）
                         .requestMatchers("/doctor/**").authenticated()
+                        // 医生工作台（叫号、开报告）：仅医生和管理员
+                        .requestMatchers("/doctor-work/**").hasAnyRole("DOCTOR", "ADMIN")
                         .anyRequest().authenticated())
                 // JWT 过滤器要排在用户名密码登录过滤器之前
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

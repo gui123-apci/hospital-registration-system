@@ -34,6 +34,7 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -300,5 +301,89 @@ public class OrderServiceImpl implements OrderService {
 
         log.info("超时订单已释放, orderId={}, scheduleId={}, sourceId={}",
                 orderId, order.getScheduleId(), order.getSourceId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void sign(Long orderId, Long userId) {
+        Order order = orderMapper.selectById(orderId);
+        if (order == null) {
+            throw new BusinessException(ResultCode.ORDER_NOT_FOUND);
+        }
+        if (!order.getUserId().equals(userId)) {
+            throw new BusinessException(ResultCode.ORDER_NOT_OWNED);
+        }
+        if (!Integer.valueOf(OrderStatus.PAID.getCode()).equals(order.getStatus())) {
+            throw new BusinessException(ResultCode.ORDER_STATUS_ERROR);
+        }
+
+        Schedule schedule = scheduleMapper.selectById(order.getScheduleId());
+        if (schedule == null) {
+            throw new BusinessException(ResultCode.SCHEDULE_NOT_FOUND);
+        }
+        // 签到窗口：只能就诊日当天签到，且时段还没结束（迟到但人到了，仍可签）
+        if (!schedule.getWorkDate().isEqual(LocalDate.now())
+                || SlotTimeUtil.isSlotEnded(schedule.getWorkDate(), schedule.getTimeSlot())) {
+            throw new BusinessException(ResultCode.SIGN_NOT_ALLOWED);
+        }
+
+        // 防重：sign_time 为 NULL 才写入。第一次 NULL→有值 1 行；连点第二次有值→不匹配 0 行。
+        // 判断与写入焊在一条 SQL，和"唯一键让位 / SETNX"同属一个思想家族。
+        int rows = orderMapper.update(null, new LambdaUpdateWrapper<Order>()
+                .eq(Order::getId, orderId)
+                .eq(Order::getStatus, OrderStatus.PAID.getCode())
+                .isNull(Order::getSignTime)
+                .set(Order::getSignTime, LocalDateTime.now()));
+        if (rows == 0) {
+            Order latest = orderMapper.selectById(orderId);
+            if (latest != null && latest.getSignTime() != null) {
+                throw new BusinessException(ResultCode.SIGN_DUPLICATED);
+            }
+            throw new BusinessException(ResultCode.ORDER_STATUS_ERROR);
+        }
+        log.info("签到成功, orderId={}, userId={}", orderId, userId);
+    }
+
+    @Override
+    public List<Long> listToFinishOrderIds(int limit) {
+        List<Order> orders = orderMapper.selectList(new LambdaQueryWrapper<Order>()
+                .eq(Order::getStatus, OrderStatus.PAID.getCode())
+                .select(Order::getId, Order::getScheduleId)
+                .last("LIMIT " + limit));
+        if (orders.isEmpty()) {
+            return List.of();
+        }
+        // 批量查排班，只保留"时段已结束"（workDate <= 今天）的单。
+        // 22:00 跑时今天所有时段都已结束，所以今天的单全部需要收尾，明天的单跳过
+        Map<Long, Schedule> scheduleMap = scheduleMapper.selectBatchIds(
+                        orders.stream().map(Order::getScheduleId).distinct().toList()).stream()
+                .collect(Collectors.toMap(Schedule::getId, Function.identity()));
+        LocalDate today = LocalDate.now();
+        return orders.stream()
+                .filter(o -> {
+                    Schedule s = scheduleMap.get(o.getScheduleId());
+                    return s != null && !s.getWorkDate().isAfter(today);
+                })
+                .map(Order::getId)
+                .toList();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void finishOrder(Long orderId) {
+        Order order = orderMapper.selectById(orderId);
+        if (order == null || !Integer.valueOf(OrderStatus.PAID.getCode()).equals(order.getStatus())) {
+            return;
+        }
+        // 已签到 → 已就诊；没签到 → 爽约。号源/库存/active_flag 都不动
+        int target = order.getSignTime() != null ? OrderStatus.FINISHED.getCode() : OrderStatus.NO_SHOW.getCode();
+        int rows = orderMapper.update(null, new LambdaUpdateWrapper<Order>()
+                .eq(Order::getId, orderId)
+                .eq(Order::getStatus, OrderStatus.PAID.getCode())
+                .set(Order::getStatus, target));
+        if (rows > 0) {
+            log.info("订单就诊状态收尾, orderId={}, target={}, signed={}",
+                    orderId, target, order.getSignTime() != null);
+        }
     }
 }

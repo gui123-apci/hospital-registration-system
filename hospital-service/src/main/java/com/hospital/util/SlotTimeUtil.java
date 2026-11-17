@@ -19,6 +19,14 @@ public final class SlotTimeUtil {
             LocalTime.of(18, 0)
     };
 
+    /** 各时段结束时刻，下标即 timeSlot：1上午 12:00、2下午 17:00、3晚间 21:00（下标 0 占位） */
+    private static final LocalTime[] SLOT_END = {
+            LocalTime.MIDNIGHT,
+            LocalTime.of(12, 0),
+            LocalTime.of(17, 0),
+            LocalTime.of(21, 0)
+    };
+
     private SlotTimeUtil() {
     }
 
@@ -42,5 +50,28 @@ public final class SlotTimeUtil {
             return true;
         }
         return workDate.isEqual(today) && !LocalTime.now().isBefore(SLOT_START[timeSlot]);
+    }
+
+    /**
+     * 该排班时段是否已经结束：日期已过，或就是今天但当前时刻已到时段结束时刻。
+     * 供签到窗口上界、收尾任务"时段结束才善后"判断使用。
+     *
+     * 未来日期返回 false（时段必然没结束），脏数据（null/越界）按已结束处理。
+     */
+    public static boolean isSlotEnded(LocalDate workDate, Integer timeSlot) {
+        if (workDate == null) {
+            return true;
+        }
+        LocalDate today = LocalDate.now();
+        if (workDate.isBefore(today)) {
+            return true;
+        }
+        if (timeSlot == null || timeSlot < 1 || timeSlot > SLOT_END.length - 1) {
+            return true;
+        }
+        if (workDate.isAfter(today)) {
+            return false;
+        }
+        return !LocalTime.now().isBefore(SLOT_END[timeSlot]);
     }
 }
