@@ -19,6 +19,28 @@ spring:
   jackson:
     time-zone: Asia/Shanghai
     default-property-inclusion: non_null
+  http:
+    client:
+      # 对应原手写客户端的 2s / 10s：模型卡住不能拖着 Tomcat 线程
+      connect-timeout: 2s
+      read-timeout: 10s
+  ai:
+    anthropic:
+      # DeepSeek 的 Anthropic 兼容接口，Spring AI 会自动拼上 /v1/messages
+      base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com/anthropic}
+      api-key: ${DEEPSEEK_API_KEY:}
+      chat:
+        options:
+          model: ${DEEPSEEK_MODEL:deepseek-flash}
+          # deepseek-flash 会先输出 thinking 再输出正文，500 容易被思考耗尽导致正文被截断
+          max-tokens: 1000
+          temperature: 0
+          # 关掉思考：Spring AI 会把 thinking 段当成正文返回，导致 JSON 解析失败
+          thinking:
+            type: disabled
+    retry:
+      # 默认重试 10 次，超时会被放大成几十秒；导诊失败直接走关键词兜底更快
+      max-attempts: 1
 
 mybatis-plus:
   configuration:
@@ -39,11 +61,6 @@ hospital:
     # 启动时若不存在该账号会自动创建管理员，生产环境务必用环境变量覆盖默认密码
     username: ${ADMIN_USERNAME:admin}
     password: ${ADMIN_PASSWORD:admin123}
-  ai:
-    # DeepSeek Anthropic 兼容接口。key 用环境变量 DEEPSEEK_API_KEY 覆盖，不要提交到 Git
-    base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com/anthropic}
-    api-key: ${DEEPSEEK_API_KEY:}
-    model: ${DEEPSEEK_MODEL:deepseek-flash}
 
 springdoc:
   api-docs:
@@ -51,11 +68,6 @@ springdoc:
   swagger-ui:
     enabled: true
     path: /swagger-ui.html
-
-knife4j:
-  enable: true
-  setting:
-    language: zh_cn
 
 logging:
   level:
