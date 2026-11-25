@@ -3,22 +3,18 @@ package com.hospital.vo.triage;
 import lombok.Data;
 
 /**
- * AI 导诊出参：推荐科室 + 理由 + 是否建议急诊 + 结果来源。
- * source 用于前端演示与排查（AI / CACHE / RULE）。
+ * AI 导诊出参：Agent 的自然语言回答。
+ * 不再返回结构化科室字段——Agent 的回答本身已经包含科室/医生/号源信息。
  */
 @Data
 public class TriageVO {
 
-    private Long departmentId;
+    /** Agent 给患者的完整回答，如"建议挂心内科，李医生周三下午还有 5 个号" */
+    private String answer;
 
-    private String departmentName;
-
-    /** 推荐理由（AI 生成或规则文案） */
-    private String reason;
-
-    /** 是否建议急诊 */
-    private Boolean urgent;
-
-    /** 结果来源：AI / CACHE / RULE */
-    private String source;
+    public static TriageVO of(String answer) {
+        TriageVO vo = new TriageVO();
+        vo.setAnswer(answer);
+        return vo;
+    }
 }

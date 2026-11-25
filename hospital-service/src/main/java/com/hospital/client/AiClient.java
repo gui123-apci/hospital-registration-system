@@ -2,6 +2,7 @@ package com.hospital.client;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.stereotype.Component;
 
 /**
@@ -11,9 +12,8 @@ import org.springframework.stereotype.Component;
  * 成功返回模型文本，失败把异常包成 RuntimeException 往上抛，
  * 降级是 TriageServiceImpl 的职责（AiClient 不越权决定"要不要兜底"）。
  *
- * 超时不再手写：由 spring.http.client.connect-timeout / read-timeout 控制；
- * 同时 spring.ai.retry.max-attempts 必须设成 1——Spring AI 默认重试 10 次，
- * 模型卡住时会把 Tomcat 线程占住十几秒，线程池被占满后连挂号接口都被拖垮。
+ * 工具通过 defaultTools 挂到 ChatClient 上：模型会自己决定调哪个工具、调几次，
+ * 边查边答——这就是从"单轮问答"到"Agent"的核心区别。
  */
 @Slf4j
 @Component
@@ -21,15 +21,18 @@ public class AiClient {
 
     private final ChatClient chatClient;
 
-    // ChatClient.Builder 由 Spring AI 自动配置提供，模型、key、超时全在 application.yml 里
-    public AiClient(ChatClient.Builder chatClientBuilder) {
-        this.chatClient = chatClientBuilder.build();
+    // ChatModel 由 Spring AI 自动配置提供（AnthropicChatModel）；triageTools 是导诊的工具集
+    public AiClient(ChatModel chatModel, TriageTools triageTools) {
+        this.chatClient = ChatClient.builder(chatModel)
+                .defaultTools(triageTools)
+                .build();
     }
 
     /**
-     * 单轮对话：systemPrompt 定角色与约束，userPrompt 是患者症状。
+     * 单轮对话入口：systemPrompt 定角色与约束，userPrompt 是患者症状。
+     * 模型会根据 systemPrompt 里的引导，自动调用挂载的工具完成导诊。
      *
-     * @return 模型返回的文本（我们要求它输出 JSON 字符串）
+     * @return 模型最终返回给患者的自然语言回答
      */
     public String chat(String systemPrompt, String userPrompt) {
         try {
@@ -40,7 +43,7 @@ public class AiClient {
                     .content();
             return text == null ? "" : text;
         } catch (Exception e) {
-            // 网络超时、401、5xx、响应解析失败都走这里，交给上层决定用关键词兜底
+            // 网络超时、401、5xx、响应解析失败都走这里，交给上层做优雅降级
             log.warn("AI 导诊调用失败, cause={}", e.getMessage());
             throw new IllegalStateException("AI 调用失败", e);
         }
