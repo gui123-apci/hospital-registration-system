@@ -18,6 +18,18 @@ public final class RedisKeyConstants {
      */
     public static final Duration STOCK_KEY_TTL = Duration.ofHours(1);
 
+    /** AI 导诊限流 key 前缀，拼 userId：triage:lock:{userId} */
+    public static final String TRIAGE_LOCK_PREFIX = "triage:lock:";
+
+    /** AI 导诊结果缓存 key 前缀，拼症状 MD5：triage:result:{md5} */
+    public static final String TRIAGE_RESULT_PREFIX = "triage:result:";
+
+    /** 导诊限流窗口：同一用户 5 秒内只允许一次，防连点/刷新重复调模型 */
+    public static final Duration TRIAGE_LOCK_TTL = Duration.ofSeconds(5);
+
+    /** 导诊结果缓存：同一症状 24 小时内命中，省模型调用、模型挂了缓存还能顶 */
+    public static final Duration TRIAGE_RESULT_TTL = Duration.ofHours(24);
+
     private RedisKeyConstants() {
     }
 }

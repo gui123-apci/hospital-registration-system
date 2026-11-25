@@ -110,6 +110,8 @@ public class SecurityConfig {
                         .requestMatchers("/doctor/**").authenticated()
                         // 医生工作台（叫号、开报告）：仅医生和管理员
                         .requestMatchers("/doctor-work/**").hasAnyRole("DOCTOR", "ADMIN")
+                        // AI 导诊：患者端，登录即可（限流按 userId 做，不靠角色）
+                        .requestMatchers("/triage/**").authenticated()
                         .anyRequest().authenticated())
                 // JWT 过滤器要排在用户名密码登录过滤器之前
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

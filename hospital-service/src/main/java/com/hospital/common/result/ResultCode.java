@@ -54,6 +54,9 @@ public enum ResultCode {
     NO_WAITING_PATIENT(2064, "当前无待就诊患者"),
     REPORT_NOT_ALLOWED(2065, "订单尚未就诊完成，无法开具报告"),
 
+    TRIAGE_TOO_FREQUENT(2070, "导诊请求过于频繁，请稍后再试"),
+    TRIAGE_NO_MATCH(2071, "暂无法判断推荐科室，请补充症状描述或到导诊台咨询"),
+
     UNAUTHORIZED(3001, "未登录或登录已失效"),
     FORBIDDEN(3002, "没有权限访问该资源"),
 
