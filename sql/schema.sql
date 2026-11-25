@@ -3,6 +3,10 @@
 -- MySQL 8.x / JDK 17 / Spring Boot 3.x
 -- ============================================================
 
+-- 显式声明连接字符集：本文件是 UTF-8 字节，若客户端字符集不是 utf8mb4，
+-- 服务器会按 latin1 解释这些字节，造成中文双重编码乱码
+SET NAMES utf8mb4;
+
 DROP DATABASE IF EXISTS hospital;
 CREATE DATABASE hospital DEFAULT CHARSET utf8mb4 COLLATE utf8mb4_general_ci;
 USE hospital;

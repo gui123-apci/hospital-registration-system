@@ -21,8 +21,10 @@ public interface OrderService {
 
     /**
      * 我的订单：分页查当前账号名下的挂号单，倒序。
+     *
+     * @param status 订单状态筛选，null 表示不过滤
      */
-    PageResult<OrderVO> pageMine(int pageNum, int pageSize, Long userId);
+    PageResult<OrderVO> pageMine(int pageNum, int pageSize, Integer status, Long userId);
 
     /**
      * 查询已超时未支付的订单 id 列表（LIMIT 分批），供定时任务扫描。

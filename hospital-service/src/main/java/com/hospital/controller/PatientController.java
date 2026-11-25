@@ -11,7 +11,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -50,5 +52,13 @@ public class PatientController {
     public Result<PatientVO> update(@Valid @RequestBody PatientUpdateDTO dto,
                                     @AuthenticationPrincipal LoginUser loginUser) {
         return Result.success(patientService.update(dto, loginUser.getUserId()));
+    }
+
+    @Operation(summary = "删除就诊人", description = "存在挂号记录的就诊人不允许删除")
+    @DeleteMapping("/{id}")
+    public Result<Void> delete(@PathVariable Long id,
+                               @AuthenticationPrincipal LoginUser loginUser) {
+        patientService.delete(id, loginUser.getUserId());
+        return Result.success("删除成功", null);
     }
 }

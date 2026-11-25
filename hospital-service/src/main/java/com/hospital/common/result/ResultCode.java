@@ -22,6 +22,7 @@ public enum ResultCode {
     ID_CARD_EXISTS(2013, "该身份证已添加为就诊人"),
     PATIENT_LIMIT_EXCEEDED(2014, "就诊人数量已达上限（20 个）"),
     PATIENT_SELF_DUPLICATED(2015, "本人信息已存在，无需重复添加"),
+    PATIENT_HAS_ORDER(2016, "该就诊人存在挂号记录，无法删除"),
 
     DEPARTMENT_NOT_FOUND(2021, "科室不存在"),
     DEPARTMENT_NAME_EXISTS(2022, "科室名称已存在"),

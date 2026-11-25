@@ -19,4 +19,7 @@ public interface PatientService {
 
     /** 更新就诊人（补全身份证、改姓名等） */
     PatientVO update(PatientUpdateDTO dto, Long userId);
+
+    /** 删除就诊人（存在挂号记录时拒绝，保证订单可追溯） */
+    void delete(Long id, Long userId);
 }

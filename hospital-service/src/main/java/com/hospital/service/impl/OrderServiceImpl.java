@@ -138,12 +138,13 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    public PageResult<OrderVO> pageMine(int pageNum, int pageSize, Long userId) {
+    public PageResult<OrderVO> pageMine(int pageNum, int pageSize, Integer status, Long userId) {
         // 分页参数钳制：与科室/医生/排班的 page() 保持一致
         long pn = Math.max(pageNum, 1);
         long ps = Math.min(Math.max(pageSize, 1), 100);
         Page<Order> page = orderMapper.selectPage(new Page<>(pn, ps), new LambdaQueryWrapper<Order>()
                 .eq(Order::getUserId, userId)
+                .eq(status != null, Order::getStatus, status)
                 .orderByDesc(Order::getId));
         if (page.getRecords().isEmpty()) {
             return new PageResult<>(page.getTotal(), List.of());

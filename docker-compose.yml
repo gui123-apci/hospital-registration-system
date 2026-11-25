@@ -1,0 +1,71 @@
+# 一条命令起整套系统：docker compose up -d --build
+# 三个服务在同一 compose 网络里，app 通过服务名 mysql/redis 连接（不是 localhost）
+services:
+
+  mysql:
+    image: mysql:8.0
+    container_name: hospital-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: "123456"
+      TZ: Asia/Shanghai
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_general_ci
+    ports:
+      # 宿主机 3307 映射到容器 3306，避开本机已占用的 3306
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      # 首次初始化时按文件名顺序自动执行：01 建表 → 02 演示/压测数据
+      # 注意：数据卷已存在时不会重复执行，要重建数据需 docker compose down -v
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./sql/data.sql:/docker-entrypoint-initdb.d/02-data.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p123456"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7
+    container_name: hospital-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build:
+      context: ./hospital-service
+    container_name: hospital-app
+    environment:
+      # 用服务名连接（compose 网络内主机名），不是 localhost
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_DB: hospital
+      MYSQL_USERNAME: root
+      MYSQL_PASSWORD: "123456"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ""
+      # 以下从 .env 读取，缺省给默认值；DEEPSEEK_API_KEY 必须在 .env 里填真实 key
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com/anthropic}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-flash}
+      JWT_SECRET: ${JWT_SECRET:-hospital-registration-system-jwt-secret-key-change-me-in-production-2026}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+    ports:
+      - "8080:8080"
+    depends_on:
+      # 等 mysql/redis 通过健康检查才启动 app，避免"应用比依赖先起、连不上报错"
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  mysql-data:
+  redis-data:

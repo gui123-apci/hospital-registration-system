@@ -44,8 +44,9 @@ public class OrderController {
     @GetMapping("/list")
     public Result<PageResult<OrderVO>> listMine(@RequestParam(defaultValue = "1") int pageNum,
                                                 @RequestParam(defaultValue = "10") int pageSize,
+                                                @RequestParam(required = false) Integer status,
                                                 @AuthenticationPrincipal LoginUser loginUser) {
-        return Result.success(orderService.pageMine(pageNum, pageSize, loginUser.getUserId()));
+        return Result.success(orderService.pageMine(pageNum, pageSize, status, loginUser.getUserId()));
     }
 
     @Operation(summary = "到院签到", description = "就诊日当天、时段结束前签到，防重复")

@@ -1,0 +1,20 @@
+:root {
+  --color-brand-deep: #12394a;
+  --color-brand: #087f7a;
+  --color-brand-soft: #e4f3f0;
+  --color-page: #f4f8fa;
+  --color-border: #dce7eb;
+  --color-text: #183b4a;
+  --color-muted: #6b818c;
+  font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  color: var(--color-text);
+  background: var(--color-page);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 360px; }
+button, input, textarea, select { font: inherit; }
+:focus-visible { outline: 3px solid rgba(8, 127, 122, .35); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

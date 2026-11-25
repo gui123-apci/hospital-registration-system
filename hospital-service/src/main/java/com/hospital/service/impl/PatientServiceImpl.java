@@ -7,7 +7,9 @@ import com.hospital.common.exception.BusinessException;
 import com.hospital.common.result.ResultCode;
 import com.hospital.dto.patient.PatientCreateDTO;
 import com.hospital.dto.patient.PatientUpdateDTO;
+import com.hospital.entity.Order;
 import com.hospital.entity.Patient;
+import com.hospital.mapper.OrderMapper;
 import com.hospital.mapper.PatientMapper;
 import com.hospital.service.PatientService;
 import com.hospital.vo.patient.PatientVO;
@@ -31,6 +33,7 @@ import java.util.List;
 public class PatientServiceImpl implements PatientService {
 
     private final PatientMapper patientMapper;
+    private final OrderMapper orderMapper;
 
     @Override
     public List<PatientVO> listMine(Long userId) {
@@ -109,6 +112,10 @@ public class PatientServiceImpl implements PatientService {
 
         // 空串视为"没填"：不支持传空串清空身份证（清空是极边缘需求，语义单独设计）
         String idCard = normalizeIdCard(dto.getIdCard());
+        // 列表接口返回的是脱敏值，前端若把含 * 的值原样提交回来，不能当成新身份证写库
+        if (idCard != null && idCard.contains("*")) {
+            idCard = null;
+        }
 
         // 身份证变了才查重（排除自己），改别的字段不碰唯一键
         if (idCard != null && !idCard.equals(exist.getIdCard())) {
@@ -133,6 +140,29 @@ public class PatientServiceImpl implements PatientService {
             throw new BusinessException(ResultCode.ID_CARD_EXISTS);
         }
         return PatientVO.from(exist);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void delete(Long id, Long userId) {
+        Patient exist = patientMapper.selectById(id);
+        if (exist == null) {
+            throw new BusinessException(ResultCode.PATIENT_NOT_FOUND);
+        }
+        if (!exist.getUserId().equals(userId)) {
+            throw new BusinessException(ResultCode.PATIENT_NOT_OWNED);
+        }
+
+        // 有挂号记录就不许删：订单是医疗凭证，必须能追溯到就诊人。
+        // 物理删除会让 tb_order.patient_id 变成孤儿，历史订单查不到就诊人
+        Long orderCount = orderMapper.selectCount(new LambdaQueryWrapper<Order>()
+                .eq(Order::getPatientId, id));
+        if (orderCount != null && orderCount > 0) {
+            throw new BusinessException(ResultCode.PATIENT_HAS_ORDER);
+        }
+
+        // 物理删除；uk_user_id_card 随行消失，同一身份证之后可以重新添加
+        patientMapper.deleteById(id);
     }
 
     /** 空串/null 归一成 null（没填）；有值原样返回 */
