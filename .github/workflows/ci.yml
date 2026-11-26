@@ -1,0 +1,110 @@
+# 持续集成：每次 push / PR 自动跑前后端全量测试
+#
+# 后端测试是 @SpringBootTest 集成测试，依赖真实 MySQL + Redis，
+# 所以这里用 GitHub Actions 的 service 容器起这两个服务，再导入 sql/ 的建表与演示数据。
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  backend:
+    name: 后端测试（Maven + MySQL + Redis）
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root123
+          TZ: Asia/Shanghai
+        ports:
+          - 3306:3306
+        # 健康检查通过后，后续步骤才会执行；否则测试会连到还没就绪的库
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -proot123"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: 确认 mysql 客户端可用
+        run: |
+          if ! command -v mysql >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq mysql-client
+          fi
+
+      - name: 初始化数据库（建表 + 演示数据）
+        run: |
+          mysql -h 127.0.0.1 -P 3306 -uroot -proot123 --default-character-set=utf8mb4 < sql/schema.sql
+          mysql -h 127.0.0.1 -P 3306 -uroot -proot123 --default-character-set=utf8mb4 < sql/data.sql
+
+      - name: mvn test
+        working-directory: hospital-service
+        env:
+          # 与 application.yml 的 ${MYSQL_HOST:...} 占位对齐：CI 里库就在本机 3306
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: '3306'
+          MYSQL_DB: hospital
+          MYSQL_USERNAME: root
+          MYSQL_PASSWORD: root123
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: '6379'
+          REDIS_PASSWORD: ''
+          # 测试不会真实调用模型；给个假值只是满足 Spring AI 对 api-key 非空的校验
+          DEEPSEEK_API_KEY: 'dummy-key-for-ci'
+        run: mvn -B test
+
+      - name: 上传测试报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: hospital-service/target/surefire-reports/
+          retention-days: 7
+
+  frontend:
+    name: 前端测试（Vitest）
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: hospital-web/package-lock.json
+
+      - name: npm ci
+        working-directory: hospital-web
+        run: npm ci
+
+      # package.json 的 test 脚本已固定 --maxWorkers=4，
+      # 避免默认并发抢占 CPU 导致个别用例超时
+      - name: npm test
+        working-directory: hospital-web
+        run: npm test
