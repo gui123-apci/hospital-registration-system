@@ -47,7 +47,10 @@ const router = createRouter({
       component: DoctorLayout,
       meta: { requiresAuth: true, roles: [2] as Role[] },
       redirect: '/doctor/workbench',
-      children: [{ path: 'workbench', name: 'doctor-workbench', component: () => import('@/views/doctor/WorkbenchView.vue') }]
+      children: [
+        { path: 'workbench', name: 'doctor-workbench', component: () => import('@/views/doctor/WorkbenchView.vue') },
+        { path: 'schedules', name: 'doctor-schedules', component: () => import('@/views/doctor/ScheduleView.vue') }
+      ]
     },
     {
       path: '/admin',

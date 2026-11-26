@@ -20,14 +20,14 @@ function logout() {
         <div><strong>智慧医院</strong><span>医生工作空间</span></div>
       </div>
       <nav class="doctor-nav" aria-label="医生导航">
-        <RouterLink to="/doctor/workbench" class="doctor-nav-item is-active">
+        <RouterLink to="/doctor/workbench" class="doctor-nav-item" active-class="is-active">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z" /></svg>
           <span>工作台</span>
         </RouterLink>
-        <span class="doctor-nav-item is-disabled" aria-disabled="true">
+        <RouterLink to="/doctor/schedules" class="doctor-nav-item" active-class="is-active">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M7 3v4M17 3v4M3 10h18M8 14h3M8 17h6" /></svg>
           <span>排班</span>
-        </span>
+        </RouterLink>
         <span class="doctor-nav-item is-disabled" aria-disabled="true">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5" /></svg>
           <span>报告</span>
