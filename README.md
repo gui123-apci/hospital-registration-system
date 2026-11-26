@@ -110,7 +110,7 @@ docker compose up -d --build
 ### 方式二：本地开发
 
 ```bash
-# 后端
+# 后端（工作目录 hospital-service，会自动读取根目录 .env 里的连接参数）
 cd hospital-service
 mvn spring-boot:run
 
@@ -120,6 +120,18 @@ npm install
 npm run dev        # http://localhost:5173
 ```
 
+后端通过 `spring.config.import` 自动读取根目录 `.env`，本地开发不用手动设环境变量。**.env 里必须把 MySQL / Redis 指向容器映射的端口**（本机 3306、6379 常被原生 MySQL/Redis 占用）：
+
+```properties
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3307
+MYSQL_PASSWORD=123456
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6380
+```
+
+> 两个端口不一致是"测试能过、页面数据不对"的头号原因：`mvn test`、压测和容器里的数据都在 3307/6380，本地后端若用默认 3306/6379，连的就是另一套库。
+
 前端通过 Vite proxy 把 `/api` 转发到 `localhost:8080` 并剥掉前缀，无需跨域配置。
 
 ## 七、压测与测试
@@ -128,7 +140,7 @@ npm run dev        # http://localhost:5173
 # 后端（8 个集成测试，连真实 MySQL + Redis，不 mock）
 cd hospital-service && mvn test
 
-# 前端（316 个用例）
+# 前端（324 个用例）
 cd hospital-web && npm test -- --maxWorkers=4
 
 # 并发压测（k6）：下单不超卖

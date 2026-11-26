@@ -4,6 +4,14 @@ server:
 spring:
   application:
     name: hospital-service
+  config:
+    # 本地开发自动读取仓库根目录的 .env：本机 3306/6379 常被原生 MySQL/Redis 占用，
+    # 容器映射在 3307/6380，靠 .env 统一指向容器，避免"后端连旧库、测试连新库"。
+    # optional 表示文件不存在就跳过：Docker 容器和 CI 里没有 .env，靠 compose/actions 注入环境变量。
+    # 两个路径覆盖两种工作目录：在 hospital-service 下启动用 ../.env，在仓库根启动用 .env
+    import:
+      - optional:file:.env[.properties]
+      - optional:file:../.env[.properties]
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DB:hospital}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
