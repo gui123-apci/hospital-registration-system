@@ -1,10 +1,19 @@
 <script setup lang="ts">
-import { RouterView } from 'vue-router'
-import { useRouter } from 'vue-router'
+import { computed } from 'vue'
+import { RouterView, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
+const route = useRoute()
 const router = useRouter()
+const heading = computed(() => ({
+  'admin-departments': '科室管理',
+  'admin-doctors': '医生管理',
+  'admin-schedules': '排班管理'
+}[String(route.name)] ?? '科室管理'))
+const departmentsActive = computed(() => route.name === 'admin-departments')
+const doctorsActive = computed(() => route.name === 'admin-doctors')
+const schedulesActive = computed(() => route.name === 'admin-schedules')
 
 function logout() {
   auth.logout()
@@ -20,18 +29,18 @@ function logout() {
         <div><strong>智慧医院</strong><span>运营管理平台</span></div>
       </div>
       <nav class="admin-nav" aria-label="管理导航">
-        <RouterLink to="/admin/departments" class="admin-nav-item is-active">
+        <RouterLink to="/admin/departments" class="admin-nav-item" :class="{ 'is-active': departmentsActive }">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V7l8-4 8 4v14M2 21h20M8 10h2M14 10h2M8 14h2M14 14h2M9 21v-4h6v4" /></svg>
           <span>科室管理</span>
         </RouterLink>
-        <span class="admin-nav-item is-disabled" aria-disabled="true">
+        <RouterLink to="/admin/doctors" class="admin-nav-item" :class="{ 'is-active': doctorsActive }">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3" /><path d="M3 20c0-4 2.7-7 6-7s6 3 6 7M16 5h5M18.5 2.5v5M16 14c2.8.4 5 2.8 5 6" /></svg>
           <span>医生管理</span>
-        </span>
-        <span class="admin-nav-item is-disabled" aria-disabled="true">
+        </RouterLink>
+        <RouterLink to="/admin/schedules" class="admin-nav-item" :class="{ 'is-active': schedulesActive }">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M7 3v4M17 3v4M3 10h18M8 14h3M8 17h6" /></svg>
           <span>排班管理</span>
-        </span>
+        </RouterLink>
       </nav>
       <div class="admin-sidebar-footer">
         <span>HOSPITAL OS</span>
@@ -43,7 +52,7 @@ function logout() {
       <header class="admin-topbar">
         <div class="admin-heading">
           <span class="admin-heading-mark" aria-hidden="true" />
-          <div><p>医院运营中心</p><h1>科室管理</h1></div>
+          <div><p>医院运营中心</p><h1>{{ heading }}</h1></div>
         </div>
         <div class="admin-user">
           <span class="admin-avatar" aria-hidden="true">{{ auth.user?.username?.slice(0, 1) || '管' }}</span>

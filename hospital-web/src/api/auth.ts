@@ -16,7 +16,7 @@ export const authApi = {
     return http.post<LoginResponse>('/auth/login', data)
   },
   register(data: RegisterRequest) {
-    return http.post<LoginResponse>('/auth/register', data)
+    return http.post<UserInfo>('/auth/register', data)
   },
   me() {
     return http.get<UserInfo>('/auth/me')

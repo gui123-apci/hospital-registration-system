@@ -8,7 +8,9 @@ import { RouterView } from 'vue-router'
     <div class="auth-glow auth-glow-two" aria-hidden="true" />
     <section class="auth-shell">
       <header class="auth-brand">
-        <span class="brand-mark" aria-hidden="true">H</span>
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32"><path d="M13 5h6v8h8v6h-8v8h-6v-8H5v-6h8V5Z" /></svg>
+        </span>
         <div>
           <strong>智慧医院</strong>
           <span>让就医更简单</span>
@@ -17,7 +19,7 @@ import { RouterView } from 'vue-router'
       <div class="auth-card">
         <RouterView />
       </div>
-      <footer class="auth-footer">安全连接 · 便捷就诊 · 全程守护</footer>
+      <footer class="auth-footer">您的健康信息将被安全保护</footer>
     </section>
   </main>
 </template>
@@ -31,9 +33,7 @@ import { RouterView } from 'vue-router'
   place-items: center;
   overflow: hidden;
   padding: 32px 20px;
-  background:
-    radial-gradient(circle at 14% 18%, rgba(8, 127, 122, 0.16), transparent 34%),
-    linear-gradient(135deg, #eef8f6 0%, #f7fafb 48%, #e8f0f5 100%);
+  background: var(--color-page);
 }
 
 .auth-glow {
@@ -69,10 +69,9 @@ import { RouterView } from 'vue-router'
   border-radius: 14px;
   background: var(--color-brand);
   color: white;
-  font-size: 24px;
-  font-weight: 800;
-  box-shadow: 0 10px 24px rgba(8, 127, 122, 0.22);
+  box-shadow: 0 10px 24px rgba(8, 127, 122, 0.18);
 }
+.brand-mark svg { width: 26px; height: 26px; fill: currentColor; }
 
 .auth-brand div { display: grid; gap: 2px; }
 .auth-brand strong { font-size: 22px; letter-spacing: 0.08em; }

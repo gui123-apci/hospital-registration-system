@@ -27,11 +27,8 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function register(phone: string, password: string) {
-    const result = await authApi.register({ phone, password })
-    token.value = result.token
-    user.value = result.user
-    sessionStorage.setItem(TOKEN_KEY, result.token)
-    return result
+    await authApi.register({ phone, password })
+    return login(phone, password)
   }
 
   async function restore() {
@@ -51,6 +48,7 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = ''
     user.value = null
     sessionStorage.removeItem(TOKEN_KEY)
+    sessionStorage.removeItem('doctor-work:active-consultation')
   }
 
   return { token, user, loading, isAuthenticated, homePath, login, register, restore, logout }

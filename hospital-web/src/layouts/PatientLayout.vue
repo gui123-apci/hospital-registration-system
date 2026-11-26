@@ -38,18 +38,18 @@ function logout() {
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5M5 9.5V21h14V9.5M9 21v-7h6v7" /></svg>
         <span>首页</span>
       </RouterLink>
-      <span class="patient-tab is-disabled" aria-disabled="true">
+      <RouterLink to="/patient/departments" class="patient-tab" active-class="is-active">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h8v4h4v14H4V7h4V3Zm0 4h8M8 12h8M8 16h5" /></svg>
         <span>挂号</span>
-      </span>
-      <span class="patient-tab is-disabled" aria-disabled="true">
+      </RouterLink>
+      <RouterLink to="/patient/orders" class="patient-tab" active-class="is-active">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Zm3 5h6M9 12h6" /></svg>
         <span>订单</span>
-      </span>
-      <span class="patient-tab is-disabled" aria-disabled="true">
+      </RouterLink>
+      <RouterLink to="/patient/patients" class="patient-tab" active-class="is-active">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" /></svg>
         <span>我的</span>
-      </span>
+      </RouterLink>
     </nav>
   </div>
 </template>

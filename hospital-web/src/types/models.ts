@@ -78,6 +78,7 @@ export interface Order {
   status: OrderStatus
   statusDesc: string
   deadlineTime?: string
+  signTime?: string
   createTime: string
 }
 
@@ -101,9 +102,5 @@ export interface WaitingPatient {
 }
 
 export interface TriageResult {
-  departmentId?: number
-  departmentName?: string
-  reason: string
-  urgent: boolean
-  source: string
+  answer: string
 }

@@ -33,10 +33,12 @@ describe('auth store', () => {
 
   it('clears session on logout', () => {
     sessionStorage.setItem('hospital_token', 'token-1')
+    sessionStorage.setItem('doctor-work:active-consultation', '{"userId":9}')
     const store = useAuthStore()
     store.logout()
     expect(store.token).toBe('')
     expect(sessionStorage.getItem('hospital_token')).toBeNull()
+    expect(sessionStorage.getItem('doctor-work:active-consultation')).toBeNull()
   })
 
   it('clears persisted and in-memory auth state for a 401 restoration failure', async () => {

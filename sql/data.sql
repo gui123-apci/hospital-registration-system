@@ -27,6 +27,13 @@ INSERT INTO tb_doctor (id, department_id, name, title, intro) VALUES
 (5, 5, '陈晓燕', '副主任医师', '擅长儿童呼吸道感染'),
 (6, 1, '压测专用医生', '主治医师', '仅用于并发压测，请勿挂这个号做演示');
 
+-- ---------- 2.1 医生登录账号（role=2），doctor001 / admin123 ----------
+-- 医生端叫号、开报告按 tb_doctor.user_id 反查医生，没有绑定账号就无法登录工作台。
+-- id 避开压测账号段（1001~1500），绑定 id=1 的医生
+INSERT INTO tb_user (id, username, password, phone, role) VALUES
+(101, 'doctor001', '$2a$10$KQgWQUGKwZpPRk2ZGlStreknAczP6xGG2hz0y7bBC1d4D5JCF.LKC', '13800000001', 2);
+UPDATE tb_doctor SET user_id = 101 WHERE id = 1;
+
 -- ---------- 3. 排班：明天，每个 20 个号 ----------
 -- 前 5 条用于演示，id=9001 是压测专用排班（下午时段，避开演示排班）
 INSERT INTO tb_schedule (id, doctor_id, department_id, work_date, time_slot, total_num, left_num, price, status) VALUES
