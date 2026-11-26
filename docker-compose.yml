@@ -66,6 +66,17 @@ services:
       redis:
         condition: service_healthy
 
+  web:
+    build:
+      context: ./hospital-web
+    container_name: hospital-web
+    ports:
+      # 患者/管理/医生三端入口：http://localhost:5173（8080 已被后端占用）
+      # 容器内 nginx 把 /api 转给 app:8080，静态资源直接由 nginx 提供
+      - "5173:80"
+    depends_on:
+      - app
+
 volumes:
   mysql-data:
   redis-data:

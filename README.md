@@ -100,7 +100,8 @@ docker compose up -d --build
 
 首次启动自动建表并灌入演示数据（5 科室 / 6 医生 / 排班与号源 / 500 个压测账号）。
 
-- 应用：`http://localhost:8080`
+- 前端入口：`http://localhost:5173`（nginx 托管静态资源，并把 `/api` 转发给后端）
+- 后端应用：`http://localhost:8080`
 - 接口文档：`http://localhost:8080/doc.html`
 - MySQL 映射到宿主机 `3307`（避开本机 3306）
 
