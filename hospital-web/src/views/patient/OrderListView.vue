@@ -22,6 +22,7 @@ const statusOptions: { label: string; value: OrderStatus | '' }[] = [
   { label: '全部', value: '' },
   { label: '待支付', value: 0 },
   { label: '已支付', value: 1 },
+  { label: '就诊中', value: 6 },
   { label: '已退号', value: 2 },
   { label: '已就诊', value: 3 },
   { label: '已取消', value: 4 },

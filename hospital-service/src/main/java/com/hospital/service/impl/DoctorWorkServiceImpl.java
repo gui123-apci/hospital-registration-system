@@ -148,12 +148,12 @@ public class DoctorWorkServiceImpl implements DoctorWorkService {
             throw new BusinessException(ResultCode.NO_WAITING_PATIENT);
         }
 
-        // 抢状态权：订单 1→3。连点两次叫号，第二次时这条单已不是 status=1，
+        // 抢状态权：订单 1→6（就诊中）。连点两次叫号，第二次时这条单已不是 status=1，
         // 队列会取到下一位——天然前进，同一个患者不会被叫两遍
         int orderRows = orderMapper.update(null, new LambdaUpdateWrapper<Order>()
                 .eq(Order::getId, next.getId())
                 .eq(Order::getStatus, OrderStatus.PAID.getCode())
-                .set(Order::getStatus, OrderStatus.FINISHED.getCode()));
+                .set(Order::getStatus, OrderStatus.IN_PROGRESS.getCode()));
         if (orderRows == 0) {
             // 被并发叫走，本轮无号可叫
             throw new BusinessException(ResultCode.NO_WAITING_PATIENT);
@@ -171,8 +171,33 @@ public class DoctorWorkServiceImpl implements DoctorWorkService {
         }
 
         Patient patient = patientMapper.selectById(next.getPatientId());
-        next.setStatus(OrderStatus.FINISHED.getCode());
+        next.setStatus(OrderStatus.IN_PROGRESS.getCode());
         return OrderVO.from(next, patient, schedule);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public OrderVO completeConsultation(Long orderId, Long doctorUserId) {
+        Order order = orderMapper.selectById(orderId);
+        if (order == null) {
+            throw new BusinessException(ResultCode.ORDER_NOT_FOUND);
+        }
+        // 医生归属校验：只能完成自己排班下的就诊
+        Schedule schedule = checkOwnership(order.getScheduleId(), doctorUserId);
+
+        // 就诊中 → 已就诊，条件更新防并发重复完成
+        int rows = orderMapper.update(null, new LambdaUpdateWrapper<Order>()
+                .eq(Order::getId, orderId)
+                .eq(Order::getStatus, OrderStatus.IN_PROGRESS.getCode())
+                .set(Order::getStatus, OrderStatus.FINISHED.getCode()));
+        if (rows == 0) {
+            // 已被人完成、或状态不是就诊中，都按"状态不允许"处理
+            throw new BusinessException(ResultCode.ORDER_STATUS_ERROR);
+        }
+
+        Patient patient = patientMapper.selectById(order.getPatientId());
+        order.setStatus(OrderStatus.FINISHED.getCode());
+        return OrderVO.from(order, patient, schedule);
     }
 
     @Override
@@ -182,8 +207,11 @@ public class DoctorWorkServiceImpl implements DoctorWorkService {
         if (order == null) {
             throw new BusinessException(ResultCode.ORDER_NOT_FOUND);
         }
-        // 报告只能长在"已就诊"的订单上：没看完/没叫到的单开报告，等于给没就诊的人造记录
-        if (!Integer.valueOf(OrderStatus.FINISHED.getCode()).equals(order.getStatus())) {
+        // 报告只能长在"开始就诊"的订单上（就诊中/已就诊）：没叫到的单开报告，
+        // 等于给没就诊的人造记录
+        boolean visiting = Integer.valueOf(OrderStatus.IN_PROGRESS.getCode()).equals(order.getStatus());
+        boolean finished = Integer.valueOf(OrderStatus.FINISHED.getCode()).equals(order.getStatus());
+        if (!(visiting || finished)) {
             throw new BusinessException(ResultCode.REPORT_NOT_ALLOWED);
         }
 

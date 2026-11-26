@@ -27,12 +27,17 @@ public interface DoctorWorkService {
     List<WaitingVO> listWaiting(Long scheduleId, Long doctorUserId);
 
     /**
-     * 叫号：取某排班下已签到且未就诊的最早一位，订单置已就诊、号源置已就诊。
+     * 叫号：取某排班下已签到且未就诊的最早一位，订单置就诊中、号源置已就诊。
      */
     OrderVO callNext(Long scheduleId, Long doctorUserId);
 
     /**
-     * 开具检验报告：仅限"已就诊"订单，且订单所属排班归属当前医生。
+     * 完成接诊：把"就诊中"订单置为已就诊，标志本次问诊结束。
+     */
+    OrderVO completeConsultation(Long orderId, Long doctorUserId);
+
+    /**
+     * 开具检验报告：仅限"就诊中/已就诊"订单，且订单所属排班归属当前医生。
      */
     ReportVO createReport(ReportCreateDTO dto, Long doctorUserId);
 }

@@ -47,11 +47,18 @@ public class DoctorWorkController {
         return Result.success(doctorWorkService.listWaiting(scheduleId, loginUser.getUserId()));
     }
 
-    @Operation(summary = "叫号", description = "按签到顺序叫下一位已签到患者，同时完成就诊标记")
+    @Operation(summary = "叫号", description = "按签到顺序叫下一位已签到患者，订单进入就诊中")
     @PostMapping("/call")
     public Result<OrderVO> callNext(@RequestParam Long scheduleId,
                                     @AuthenticationPrincipal LoginUser loginUser) {
         return Result.success(doctorWorkService.callNext(scheduleId, loginUser.getUserId()));
+    }
+
+    @Operation(summary = "完成接诊", description = "把就诊中订单置为已就诊，标志本次问诊结束")
+    @PostMapping("/complete")
+    public Result<OrderVO> completeConsultation(@RequestParam Long orderId,
+                                                @AuthenticationPrincipal LoginUser loginUser) {
+        return Result.success(doctorWorkService.completeConsultation(orderId, loginUser.getUserId()));
     }
 
     @Operation(summary = "开具检验报告", description = "仅限已就诊订单，且订单归属当前医生")

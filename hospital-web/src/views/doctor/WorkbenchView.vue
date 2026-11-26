@@ -62,7 +62,7 @@ function isOrder(value: unknown): value is Order {
     && isDateString(value.workDate)
     && (value.timeSlot === 1 || value.timeSlot === 2 || value.timeSlot === 3)
     && typeof value.amount === 'number' && Number.isFinite(value.amount) && value.amount >= 0
-    && value.status === 3
+    && value.status === 6
     && isNonEmptyString(value.statusDesc)
     && isDateString(value.createTime)
     && (value.deadlineTime === undefined || isDateString(value.deadlineTime))
@@ -137,6 +137,7 @@ const scheduleId = ref<number>()
 const activeOrder = ref<Order | null>(null)
 const reportOpen = ref(false)
 const calling = ref(false)
+const completing = ref(false)
 const callError = ref('')
 const actionSuccess = ref('')
 const queueWarning = ref('')
@@ -232,20 +233,41 @@ function retryQueue() {
   void reload()
 }
 
-async function reportSaved() {
+async function completeConsultation() {
+  if (!activeOrder.value || completing.value) return
+  const targetOrder = activeOrder.value
   const requestContext = contextVersion
-  activeOrder.value = null
-  clearStoredConsultation()
-  reportOpen.value = false
-  actionSuccess.value = '报告已保存，当前患者已完成就诊'
+  completing.value = true
+  callError.value = ''
+  actionSuccess.value = ''
   queueWarning.value = ''
-  if (scheduleId.value !== undefined) await refreshAfterMutation('报告已保存', requestContext)
+  try {
+    await doctorWorkApi.complete(targetOrder.id)
+    if (requestContext !== contextVersion) return
+    activeOrder.value = null
+    clearStoredConsultation()
+    actionSuccess.value = `已完成接诊：${targetOrder.patientName}`
+    if (scheduleId.value !== undefined) await refreshAfterMutation('完成接诊', requestContext)
+  } catch (reason) {
+    if (requestContext === contextVersion) {
+      callError.value = reason instanceof Error ? reason.message : '完成接诊失败，请稍后重试'
+    }
+  } finally {
+    if (requestContext === contextVersion) completing.value = false
+  }
+}
+
+async function reportSaved() {
+  // 报告保存只代表"开了一份报告"，不代表就诊结束；医生还需点「完成接诊」收尾
+  reportOpen.value = false
+  actionSuccess.value = '报告已保存'
+  queueWarning.value = ''
 }
 </script>
 
 <template>
   <div class="workbench-page">
-    <PageHeader title="医生工作台" subtitle="按签到顺序叫号，完成就诊后及时填写报告" />
+    <PageHeader title="医生工作台" subtitle="按签到顺序叫号，填写报告后点击完成接诊" />
 
     <ElAlert
       v-if="actionSuccess"
@@ -291,7 +313,7 @@ async function reportSaved() {
       <p v-else-if="!schedulesLoading && !schedules.length" class="schedule-notice">
         当前没有可出诊的排班（今日时段已结束或尚未排班）。
       </p>
-      <p v-if="activeOrder" class="locked-hint">当前患者报告保存前，不可切换排班或继续叫号。</p>
+      <p v-if="activeOrder" class="locked-hint">当前患者完成接诊前，不可切换排班或继续叫号。</p>
     </section>
 
     <section v-if="activeOrder" class="active-panel" aria-labelledby="active-heading">
@@ -307,8 +329,11 @@ async function reportSaved() {
         <div><dt>就诊日期</dt><dd>{{ activeOrder.workDate }}</dd></div>
       </dl>
       <div class="active-actions">
-        <p>请完成本次就诊记录，保存报告后继续叫号。</p>
-        <ElButton type="primary" :disabled="calling" @click="reportOpen = true">填写报告</ElButton>
+        <p>可填写报告，完成后点击「完成接诊」继续叫号。</p>
+        <div class="active-actions-buttons">
+          <ElButton :disabled="calling || completing" @click="reportOpen = true">填写报告</ElButton>
+          <ElButton type="primary" :loading="completing" :disabled="calling" @click="completeConsultation">完成接诊</ElButton>
+        </div>
       </div>
     </section>
 
@@ -347,7 +372,7 @@ async function reportSaved() {
       </ol>
 
       <div class="call-bar">
-        <p v-if="activeOrder">请先保存当前患者报告，再叫下一位。</p>
+        <p v-if="activeOrder">请先完成当前患者接诊，再叫下一位。</p>
         <p v-else-if="!waiting?.length">队列为空时无法叫号。</p>
         <p v-else>系统将按队列顺序叫下一位患者。</p>
         <ElButton
@@ -404,6 +429,7 @@ async function reportSaved() {
 .active-details dd { margin: 0; font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
 .active-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 20px; padding-top: 16px; border-top: 1px solid #d9ebe7; }
 .active-actions p { margin: 0; color: var(--color-muted); font-size: 12px; line-height: 1.6; }
+.active-actions-buttons { display: flex; flex: none; gap: 10px; }
 .active-actions :deep(.el-button) { min-height: 44px; border-radius: 10px; font-weight: 700; }
 .queue-panel { margin-top: 18px; overflow: hidden; }
 .queue-header { align-items: center; padding: 22px 24px 18px; border-bottom: 1px solid #edf2f4; }

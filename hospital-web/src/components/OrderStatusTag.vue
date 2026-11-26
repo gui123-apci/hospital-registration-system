@@ -9,7 +9,8 @@ const config = computed(() => ({
   2: { text: '已退号', type: 'info' as const },
   3: { text: '已就诊', type: 'success' as const },
   4: { text: '已取消', type: 'info' as const },
-  5: { text: '爽约', type: 'danger' as const }
+  5: { text: '爽约', type: 'danger' as const },
+  6: { text: '就诊中', type: 'warning' as const }
 }[props.status]))
 </script>
 

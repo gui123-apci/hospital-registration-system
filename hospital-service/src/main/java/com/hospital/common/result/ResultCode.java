@@ -53,7 +53,7 @@ public enum ResultCode {
     DOCTOR_NOT_BOUND(2062, "当前账号未绑定医生"),
     SCHEDULE_NOT_OWNED(2063, "无权操作该排班"),
     NO_WAITING_PATIENT(2064, "当前无待就诊患者"),
-    REPORT_NOT_ALLOWED(2065, "订单尚未就诊完成，无法开具报告"),
+    REPORT_NOT_ALLOWED(2065, "订单尚未开始就诊，无法开具报告"),
 
     TRIAGE_TOO_FREQUENT(2070, "导诊请求过于频繁，请稍后再试"),
 

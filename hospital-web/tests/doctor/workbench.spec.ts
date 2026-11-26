@@ -38,10 +38,12 @@ const calledOrder: Order = {
   workDate: '2026-11-25',
   timeSlot: 1,
   amount: 36,
-  status: 3,
-  statusDesc: '已就诊',
+  status: 6,
+  statusDesc: '就诊中',
   createTime: '2026-11-25 07:50:00'
 }
+
+const completedOrder: Order = { ...calledOrder, status: 3, statusDesc: '已就诊' }
 
 const savedReport: Report = {
   id: 901,
@@ -156,6 +158,7 @@ describe('WorkbenchView', () => {
     })
     vi.mocked(http.post).mockImplementation(async (url) => {
       if (url === '/doctor-work/call') return calledOrder
+      if (url === '/doctor-work/complete') return completedOrder
       if (url === '/doctor-work/report') return savedReport
       throw new Error('unexpected endpoint')
     })
@@ -273,7 +276,7 @@ describe('WorkbenchView', () => {
     expect(getCalls('/doctor-work/waiting')).toHaveLength(0)
   })
 
-  it.each([0, 1, 2, 4, 5])('removes stored context when the order status is %s', async (status) => {
+  it.each([0, 1, 2, 3, 4, 5])('removes stored context when the order status is %s', async (status) => {
     sessionStorage.setItem(consultationStorageKey, JSON.stringify({
       ...storedConsultation(),
       order: { ...calledOrder, status }
@@ -351,7 +354,7 @@ describe('WorkbenchView', () => {
     expect(getCalls('/doctor-work/waiting')[1]).toEqual(['/doctor-work/waiting', { params: { scheduleId: 101 } }])
     expect(wrapper.get('.active-panel').text()).toContain('李患者')
     expect(wrapper.get('.active-panel').text()).toContain('QUEUE-003')
-    expect(wrapper.get('.active-panel').text()).toContain('已就诊')
+    expect(wrapper.get('.active-panel').text()).toContain('就诊中')
     expect(JSON.parse(sessionStorage.getItem(consultationStorageKey)!)).toEqual(storedConsultation())
     expect(wrapper.findComponent(NameIdSelect).props('disabled')).toBe(true)
     expect(buttonWithText(wrapper, '叫下一位')!.attributes('disabled')).toBeDefined()
@@ -504,7 +507,7 @@ describe('WorkbenchView', () => {
     expect(buttonWithText(wrapper, '填写报告')!.attributes('disabled')).toBeUndefined()
   })
 
-  it('clears restored context after the report is saved', async () => {
+  it('keeps the active consultation after the report is saved', async () => {
     sessionStorage.setItem(consultationStorageKey, JSON.stringify(storedConsultation()))
     const wrapper = mountWorkbench()
     await settle()
@@ -514,11 +517,13 @@ describe('WorkbenchView', () => {
     await drawer.get('form').trigger('submit')
     await flushPromises()
 
-    expect(wrapper.find('.active-patient').exists()).toBe(false)
-    expect(sessionStorage.getItem(consultationStorageKey)).toBeNull()
+    // 报告保存不再结束就诊：患者仍是"就诊中"，等医生点「完成接诊」收尾
+    expect(wrapper.find('.active-patient').exists()).toBe(true)
+    expect(sessionStorage.getItem(consultationStorageKey)).not.toBeNull()
+    expect(buttonWithText(wrapper, '完成接诊')).toBeDefined()
   })
 
-  it('submits the exact report payload and clears the active patient after saving', async () => {
+  it('submits the exact report payload and keeps the patient active until completion', async () => {
     const wrapper = mountWorkbench()
     await settle()
     await chooseSchedule(wrapper)
@@ -533,56 +538,56 @@ describe('WorkbenchView', () => {
       title: '呼吸科就诊记录',
       content: '按时服药'
     })
+    // 报告保存后仍是就诊中，不结束就诊；ReportDrawer 组件仍在（v-if="activeOrder"），只是抽屉已关
+    expect(wrapper.find('.active-patient').exists()).toBe(true)
+    expect(wrapper.findComponent(ReportDrawer).exists()).toBe(true)
+    expect(wrapper.findComponent(NameIdSelect).props('disabled')).toBe(true)
+    expect(wrapper.text()).toContain('报告已保存')
+
+    // 点「完成接诊」才结束就诊
+    await buttonWithText(wrapper, '完成接诊')!.trigger('click')
+    await flushPromises()
+    expect(http.post).toHaveBeenLastCalledWith('/doctor-work/complete', null, { params: { orderId: 66 } })
     expect(wrapper.find('.active-patient').exists()).toBe(false)
     expect(sessionStorage.getItem(consultationStorageKey)).toBeNull()
-    expect(wrapper.findComponent(ReportDrawer).exists()).toBe(false)
     expect(wrapper.findComponent(NameIdSelect).props('disabled')).toBe(false)
-    expect(getCalls('/doctor-work/waiting')).toHaveLength(3)
-    expect(wrapper.text()).toContain('报告已保存')
   })
 
-  it('clears the active patient and unlocks schedule before report refresh settles', async () => {
+  it('unlocks schedule before the completion refresh settles', async () => {
     let finishRefresh!: (value: WaitingPatient[]) => void
     waitingResults = [waiting, [waiting[0]], new Promise((resolve) => { finishRefresh = resolve })]
     const wrapper = mountWorkbench()
     await settle()
     await chooseSchedule(wrapper)
     await callNext(wrapper)
-    const drawer = await fillReport(wrapper)
-    await drawer.get('form').trigger('submit')
+    await buttonWithText(wrapper, '完成接诊')!.trigger('click')
     await flushPromises()
 
     expect(getCalls('/doctor-work/waiting')).toHaveLength(3)
     expect(wrapper.find('.active-patient').exists()).toBe(false)
-    expect(wrapper.findComponent(ReportDrawer).exists()).toBe(false)
     expect(wrapper.findComponent(NameIdSelect).props('disabled')).toBe(false)
-    expect(wrapper.get('.success-alert').text()).toContain('报告已保存')
+    expect(wrapper.get('.success-alert').text()).toContain('已完成接诊')
 
     finishRefresh([])
     await flushPromises()
     expect(wrapper.text()).toContain('暂无候诊患者')
-    expect(wrapper.get('.success-alert').text()).toContain('报告已保存')
+    expect(wrapper.get('.success-alert').text()).toContain('已完成接诊')
   })
 
-  it('preserves report-save success when queue refresh fails and prevents duplicate submission', async () => {
-    waitingResults = [waiting, [waiting[0]], new Error('报告后队列刷新失败')]
+  it('preserves completion success when queue refresh fails', async () => {
+    waitingResults = [waiting, [waiting[0]], new Error('接诊后队列刷新失败')]
     const wrapper = mountWorkbench()
     await settle()
     await chooseSchedule(wrapper)
     await callNext(wrapper)
-    const drawer = await fillReport(wrapper)
-    const form = drawer.get('form')
-    await form.trigger('submit')
-    await flushPromises()
-    await form.trigger('submit')
+    await buttonWithText(wrapper, '完成接诊')!.trigger('click')
     await flushPromises()
 
-    expect(vi.mocked(http.post).mock.calls.filter(([url]) => url === '/doctor-work/report')).toHaveLength(1)
+    expect(vi.mocked(http.post).mock.calls.filter(([url]) => url === '/doctor-work/complete')).toHaveLength(1)
     expect(wrapper.find('.active-patient').exists()).toBe(false)
-    expect(wrapper.get('.queue-warning').text()).toContain('报告已保存')
-    expect(wrapper.get('.queue-warning').text()).toContain('报告后队列刷新失败')
-    expect(wrapper.text()).not.toContain('报告保存失败')
-    expect(buttonWithText(wrapper, '填写报告')).toBeUndefined()
+    expect(wrapper.get('.queue-warning').text()).toContain('完成接诊')
+    expect(wrapper.get('.queue-warning').text()).toContain('接诊后队列刷新失败')
+    expect(wrapper.text()).not.toContain('完成接诊失败')
   })
 })
 

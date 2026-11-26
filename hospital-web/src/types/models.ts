@@ -1,6 +1,6 @@
 export type Role = 0 | 1 | 2
 export type TimeSlot = 1 | 2 | 3
-export type OrderStatus = 0 | 1 | 2 | 3 | 4 | 5
+export type OrderStatus = 0 | 1 | 2 | 3 | 4 | 5 | 6
 
 export interface Result<T> {
   code: number
