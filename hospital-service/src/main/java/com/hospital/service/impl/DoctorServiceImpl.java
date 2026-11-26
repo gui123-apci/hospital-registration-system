@@ -9,13 +9,16 @@ import com.hospital.dto.doctor.DoctorCreateDTO;
 import com.hospital.dto.doctor.DoctorUpdateDTO;
 import com.hospital.entity.Doctor;
 import com.hospital.entity.Report;
+import com.hospital.entity.User;
 import com.hospital.mapper.DepartmentMapper;
 import com.hospital.mapper.DoctorMapper;
 import com.hospital.mapper.ReportMapper;
 import com.hospital.mapper.ScheduleMapper;
+import com.hospital.mapper.UserMapper;
 import com.hospital.service.DoctorService;
 import com.hospital.vo.doctor.DoctorVO;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,10 +31,16 @@ import java.util.List;
 @RequiredArgsConstructor
 public class DoctorServiceImpl implements DoctorService {
 
+    /** 新医生账号的统一初始密码，管理员建号后需提醒医生自行修改 */
+    private static final String DOCTOR_INITIAL_PASSWORD = "admin123";
+    private static final int ROLE_DOCTOR = 2;
+
     private final DoctorMapper doctorMapper;
     private final ScheduleMapper scheduleMapper;
     private final DepartmentMapper departmentMapper;
     private final ReportMapper reportMapper;
+    private final UserMapper userMapper;
+    private final PasswordEncoder passwordEncoder;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -42,12 +51,28 @@ public class DoctorServiceImpl implements DoctorService {
             throw new BusinessException(ResultCode.DEPARTMENT_NOT_FOUND);
         }
 
+        // 手机号即登录账号，先查重：既给出可读提示，也靠 tb_user.username 唯一索引兜底
+        String phone = dto.getPhone().trim();
+        Long duplicated = userMapper.selectCount(new LambdaQueryWrapper<User>()
+                .eq(User::getUsername, phone));
+        if (duplicated != null && duplicated > 0) {
+            throw new BusinessException(ResultCode.USERNAME_EXISTS);
+        }
+
+        // 建档 + 开户在同一事务：账号建了但医生没建，会留下无法登录的孤儿账号
+        User account = new User();
+        account.setUsername(phone);
+        account.setPhone(phone);
+        account.setPassword(passwordEncoder.encode(DOCTOR_INITIAL_PASSWORD));
+        account.setRole(ROLE_DOCTOR);
+        userMapper.insert(account);
+
         Doctor doctor = new Doctor();
         doctor.setDepartmentId(dto.getDepartmentId());
         doctor.setName(dto.getName());
         doctor.setTitle(dto.getTitle());
         doctor.setIntro(dto.getIntro());
-        doctor.setUserId(dto.getUserId());
+        doctor.setUserId(account.getId());
         doctorMapper.insert(doctor);
 
         return DoctorVO.from(doctor);

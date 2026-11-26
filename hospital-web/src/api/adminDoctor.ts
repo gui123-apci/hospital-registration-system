@@ -6,10 +6,16 @@ export interface DoctorCreateRequest {
   name: string
   title?: string
   intro?: string
+  /** 手机号同时作为医生登录账号，后端自动创建角色为医生的账号 */
+  phone: string
 }
 
-export interface DoctorUpdateRequest extends DoctorCreateRequest {
+export interface DoctorUpdateRequest {
   id: number
+  departmentId: number
+  name: string
+  title?: string
+  intro?: string
 }
 
 export const adminDoctorApi = {

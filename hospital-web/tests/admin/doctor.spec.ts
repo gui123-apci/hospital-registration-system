@@ -75,9 +75,13 @@ async function mountDrawer(doctor: Doctor | null = null) {
   return wrapper
 }
 
-async function fillDrawer(drawer: ReturnType<typeof mount>, values: { departmentId?: number; name?: string; title?: string; intro?: string } = {}) {
+async function fillDrawer(drawer: ReturnType<typeof mount>, values: { departmentId?: number; name?: string; phone?: string; title?: string; intro?: string } = {}) {
   if (values.departmentId !== undefined) await drawer.get('select[aria-label="请选择科室"]').setValue(String(values.departmentId))
   if (values.name !== undefined) await drawer.get('input[aria-label="医生姓名"]').setValue(values.name)
+  // 新增模式才有手机号输入框；没显式传值时填默认值，避免每个用例都重复写
+  const phoneInput = drawer.find('input[aria-label="手机号"]')
+  if (phoneInput.exists() && values.phone === undefined) await phoneInput.setValue('13800000001')
+  if (values.phone !== undefined && phoneInput.exists()) await phoneInput.setValue(values.phone)
   if (values.title !== undefined) await drawer.get('input[aria-label="职称"]').setValue(values.title)
   if (values.intro !== undefined) await drawer.get('textarea[aria-label="医生简介"]').setValue(values.intro)
 }
@@ -122,8 +126,8 @@ describe('admin doctor api', () => {
     vi.mocked(http.delete).mockResolvedValue(undefined)
   })
 
-  it('creates a doctor without account binding', async () => {
-    const payload = { departmentId: 11, name: '张医生', title: '主任医师', intro: '呼吸科' }
+  it('creates a doctor with the phone used as login account', async () => {
+    const payload = { departmentId: 11, name: '张医生', title: '主任医师', intro: '呼吸科', phone: '13800000001' }
     await adminDoctorApi.create(payload)
     expect(http.post).toHaveBeenCalledWith('/admin/doctor', payload)
     expect(vi.mocked(http.post).mock.calls[0][1]).not.toHaveProperty('userId')
@@ -178,7 +182,7 @@ describe('DoctorFormDrawer', () => {
     await wrapper.get('form').trigger('submit')
     await flushPromises()
 
-    expect(http.post).toHaveBeenCalledWith('/admin/doctor', { departmentId: 11, name: '张医生', title: '主任医师', intro: '呼吸诊疗' })
+    expect(http.post).toHaveBeenCalledWith('/admin/doctor', { departmentId: 11, name: '张医生', title: '主任医师', intro: '呼吸诊疗', phone: '13800000001' })
     expect(wrapper.emitted('update:modelValue')).toEqual([[false]])
     expect(wrapper.emitted('saved')).toEqual([[zhang]])
   })
@@ -202,6 +206,8 @@ describe('DoctorFormDrawer', () => {
     ['departmentId', '', '请选择科室'],
     ['name', '   ', '请输入医生姓名'],
     ['name', '医'.repeat(33), '医生姓名不能超过 32 个字'],
+    ['phone', '', '请输入手机号'],
+    ['phone', '12345', '请输入 11 位手机号'],
     ['title', '职'.repeat(33), '职称不能超过 32 个字'],
     ['intro', '简'.repeat(256), '医生简介不能超过 255 个字']
   ])('rejects invalid %s with an accessible field error', async (field, value, message) => {
@@ -209,7 +215,7 @@ describe('DoctorFormDrawer', () => {
     await fillDrawer(wrapper, { departmentId: 3, name: '张医生', [field]: value })
     await wrapper.get('form').trigger('submit')
     await flushPromises()
-    const selector = field === 'departmentId' ? 'select[aria-label="请选择科室"]' : field === 'name' ? 'input[aria-label="医生姓名"]' : field === 'title' ? 'input[aria-label="职称"]' : 'textarea[aria-label="医生简介"]'
+    const selector = field === 'departmentId' ? 'select[aria-label="请选择科室"]' : field === 'name' ? 'input[aria-label="医生姓名"]' : field === 'phone' ? 'input[aria-label="手机号"]' : field === 'title' ? 'input[aria-label="职称"]' : 'textarea[aria-label="医生简介"]'
     const input = wrapper.get(selector)
     expect(input.attributes('aria-invalid')).toBe('true')
     expect(wrapper.get(`#${input.attributes('aria-describedby')}`).text()).toContain(message)
@@ -225,15 +231,19 @@ describe('DoctorFormDrawer', () => {
     await fillDrawer(wrapper, { departmentId: 3, name, title, intro })
     await wrapper.get('form').trigger('submit')
     await flushPromises()
-    expect(http.post).toHaveBeenCalledWith('/admin/doctor', { departmentId: 3, name, title, intro })
+    expect(http.post).toHaveBeenCalledWith('/admin/doctor', { departmentId: 3, name, title, intro, phone: '13800000001' })
   })
 
-  it('exposes required semantics for department and name', async () => {
+  it('exposes required semantics for department, name and phone', async () => {
     const wrapper = await mountDrawer()
     expect(wrapper.get('select[aria-label="请选择科室"]').attributes('aria-required')).toBe('true')
     const name = wrapper.get('input[aria-label="医生姓名"]')
     expect(name.attributes('required')).toBeDefined()
     expect(name.attributes('aria-required')).toBe('true')
+    const phone = wrapper.get('input[aria-label="手机号"]')
+    expect(phone.attributes('required')).toBeDefined()
+    expect(phone.attributes('aria-required')).toBe('true')
+    expect(wrapper.text()).toContain('初始密码为 admin123')
   })
 
   it('shows option loading and visible error with retry before enabling save', async () => {
@@ -358,7 +368,7 @@ describe('DoctorFormDrawer', () => {
     await drawer.get('form').trigger('submit')
     await flushPromises()
     expect(http.post).toHaveBeenCalledTimes(2)
-    expect(http.post).toHaveBeenLastCalledWith('/admin/doctor', { departmentId: 9, name: '王医生', title: '', intro: '' })
+    expect(http.post).toHaveBeenLastCalledWith('/admin/doctor', { departmentId: 9, name: '王医生', title: '', intro: '', phone: '13800000001' })
     wrapper.unmount()
   })
 
@@ -481,7 +491,7 @@ describe('DoctorManageView', () => {
     await fillDrawer(drawer, { departmentId: 9, name: ' 王医生 ', title: ' 主治医师 ', intro: ' 口腔 ' })
     await drawer.get('form').trigger('submit')
     await flushPromises()
-    expect(http.post).toHaveBeenCalledWith('/admin/doctor', { departmentId: 9, name: '王医生', title: '主治医师', intro: '口腔' })
+    expect(http.post).toHaveBeenCalledWith('/admin/doctor', { departmentId: 9, name: '王医生', title: '主治医师', intro: '口腔', phone: '13800000001' })
     expect(vi.mocked(http.get).mock.calls.filter(([url]) => url === '/admin/doctor/page').at(-1)).toEqual(['/admin/doctor/page', { params: { pageNum: 2, pageSize: 10 } }])
     expect(wrapper.findComponent(DoctorFormDrawer).props('modelValue')).toBe(false)
     expect(wrapper.get('.action-success').text()).toContain('新增成功')

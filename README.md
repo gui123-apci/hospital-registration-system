@@ -137,10 +137,10 @@ REDIS_PORT=6380
 ## 七、压测与测试
 
 ```bash
-# 后端（8 个集成测试，连真实 MySQL + Redis，不 mock）
+# 后端（10 个集成测试，连真实 MySQL + Redis，不 mock）
 cd hospital-service && mvn test
 
-# 前端（324 个用例）
+# 前端（326 个用例）
 cd hospital-web && npm test -- --maxWorkers=4
 
 # 并发压测（k6）：下单不超卖

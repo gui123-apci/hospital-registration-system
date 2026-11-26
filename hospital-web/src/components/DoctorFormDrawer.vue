@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { ElAlert, ElButton, ElInput } from 'element-plus'
 import { adminDepartmentApi } from '@/api/adminDepartment'
-import { adminDoctorApi, type DoctorCreateRequest } from '@/api/adminDoctor'
+import { adminDoctorApi } from '@/api/adminDoctor'
 import FormDrawer from '@/components/FormDrawer.vue'
 import NameIdSelect, { type NameIdOption } from '@/components/NameIdSelect.vue'
 import type { Doctor } from '@/types/models'
@@ -16,13 +16,14 @@ const emit = defineEmits<{
   saved: [doctor: Doctor]
 }>()
 
-const form = reactive<{ departmentId?: number; name: string; title: string; intro: string }>({
+const form = reactive<{ departmentId?: number; name: string; phone: string; title: string; intro: string }>({
   departmentId: undefined,
   name: '',
+  phone: '',
   title: '',
   intro: ''
 })
-const errors = reactive({ departmentId: '', name: '', title: '', intro: '' })
+const errors = reactive({ departmentId: '', name: '', phone: '', title: '', intro: '' })
 const options = ref<NameIdOption[]>([])
 const optionsLoading = ref(false)
 const optionsError = ref('')
@@ -41,10 +42,12 @@ const visible = computed({
 function resetForm() {
   form.departmentId = props.doctor?.departmentId
   form.name = props.doctor?.name ?? ''
+  form.phone = ''
   form.title = props.doctor?.title ?? ''
   form.intro = props.doctor?.intro ?? ''
   errors.departmentId = ''
   errors.name = ''
+  errors.phone = ''
   errors.title = ''
   errors.intro = ''
   submitError.value = ''
@@ -69,13 +72,18 @@ async function loadOptions() {
 
 function validate() {
   const name = form.name.trim()
+  const phone = form.phone.trim()
   const title = form.title.trim()
   const intro = form.intro.trim()
   errors.departmentId = form.departmentId === undefined ? '请选择科室' : ''
   errors.name = !name ? '请输入医生姓名' : name.length > 32 ? '医生姓名不能超过 32 个字' : ''
+  // 编辑时不改手机号：账号一旦建立，改手机号涉及登录名变更，放到账号管理中处理
+  errors.phone = editing.value && !phone
+    ? ''
+    : !phone ? '请输入手机号' : /^1[3-9]\d{9}$/.test(phone) ? '' : '请输入 11 位手机号'
   errors.title = title.length > 32 ? '职称不能超过 32 个字' : ''
   errors.intro = intro.length > 255 ? '医生简介不能超过 255 个字' : ''
-  return !errors.departmentId && !errors.name && !errors.title && !errors.intro
+  return !errors.departmentId && !errors.name && !errors.phone && !errors.title && !errors.intro
 }
 
 async function submit() {
@@ -87,15 +95,15 @@ async function submit() {
   if (departmentId === undefined) return
   submitting.value = true
   try {
-    const payload: DoctorCreateRequest = {
+    const base = {
       departmentId,
       name: form.name.trim(),
       title: form.title.trim(),
       intro: form.intro.trim()
     }
     const doctor = props.doctor
-      ? await adminDoctorApi.update({ id: props.doctor.id, ...payload })
-      : await adminDoctorApi.create(payload)
+      ? await adminDoctorApi.update({ id: props.doctor.id, ...base })
+      : await adminDoctorApi.create({ ...base, phone: form.phone.trim() })
     saved.value = true
     emit('update:modelValue', false)
     emit('saved', doctor)
@@ -188,6 +196,25 @@ watch(() => props.doctor, () => {
         <p v-if="errors.name" id="doctor-name-error" class="field-error" role="alert">{{ errors.name }}</p>
       </div>
 
+      <div v-if="!editing" class="form-field">
+        <label for="doctor-phone">手机号 <span aria-hidden="true">*</span></label>
+        <ElInput
+          id="doctor-phone"
+          v-model="form.phone"
+          aria-label="手机号"
+          aria-required="true"
+          required
+          :aria-invalid="Boolean(errors.phone)"
+          :aria-describedby="errors.phone ? 'doctor-phone-error' : 'doctor-phone-hint'"
+          :maxlength="11"
+          :disabled="submitting || saved"
+          placeholder="请输入 11 位手机号"
+          @input="submitError = ''"
+        />
+        <p v-if="errors.phone" id="doctor-phone-error" class="field-error" role="alert">{{ errors.phone }}</p>
+        <p v-else id="doctor-phone-hint" class="field-hint">该手机号同时作为医生登录账号，初始密码为 admin123。</p>
+      </div>
+
       <div class="form-field">
         <label for="doctor-title">职称 <span class="optional-label">选填</span></label>
         <ElInput
@@ -246,7 +273,7 @@ watch(() => props.doctor, () => {
 .form-field label > span:not(.optional-label) { color: #b42318; }
 .optional-label { margin-left: 4px; color: var(--color-muted); font-size: 12px; font-weight: 400; }
 .department-select { width: 100%; }
-.field-error, .options-status { margin: 0; color: var(--color-muted); font-size: 12px; line-height: 1.5; }
+.field-error, .options-status, .field-hint { margin: 0; color: var(--color-muted); font-size: 12px; line-height: 1.5; }
 .field-error { color: #b42318; }
 .options-error { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid #f0c9c4; border-radius: 8px; background: #fff5f4; color: #b42318; font-size: 13px; }
 .options-error :deep(.el-button) { min-height: 36px; margin-left: 0; }
