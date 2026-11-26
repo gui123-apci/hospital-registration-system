@@ -28,6 +28,11 @@ services:
     image: redis:7
     container_name: hospital-redis
     command: redis-server --appendonly yes
+    ports:
+      # 宿主机 6380 → 容器 6379：本机已有原生 Redis 常驻 6379，避开冲突。
+      # 容器内 app 仍走服务名 redis:6379，与此映射无关；
+      # 宿主机跑 mvn test 时把 REDIS_PORT 设为 6380 即可连到这里
+      - "127.0.0.1:6380:6379"
     volumes:
       - redis-data:/data
     healthcheck:

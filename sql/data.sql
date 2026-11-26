@@ -30,8 +30,9 @@ INSERT INTO tb_doctor (id, department_id, name, title, intro) VALUES
 -- ---------- 2.1 医生登录账号（role=2），doctor001 / admin123 ----------
 -- 医生端叫号、开报告按 tb_doctor.user_id 反查医生，没有绑定账号就无法登录工作台。
 -- id 避开压测账号段（1001~1500），绑定 id=1 的医生
+-- 哈希是 admin123 的 BCrypt 密文（与后端启动时创建的 admin 账号同一个密码，已实测可登录）
 INSERT INTO tb_user (id, username, password, phone, role) VALUES
-(101, 'doctor001', '$2a$10$KQgWQUGKwZpPRk2ZGlStreknAczP6xGG2hz0y7bBC1d4D5JCF.LKC', '13800000001', 2);
+(101, 'doctor001', '$2a$10$jy5H9RlP5R.pGQxaQHBwluCbzllgtV6r2sg.MtsXojJV9ljD8/Ff.', '13800000001', 2);
 UPDATE tb_doctor SET user_id = 101 WHERE id = 1;
 
 -- ---------- 3. 排班：明天，每个 20 个号 ----------
@@ -56,10 +57,11 @@ CROSS JOIN (
 ) d;
 
 -- ---------- 5. 压测账号 500 个：id 1001~1500，用户名 perf001~perf500 ----------
+-- 密码统一 admin123；哈希必须与后端创建的 admin 账号一致，否则 k6 的 setup 全部登录失败（2002）
 INSERT INTO tb_user (id, username, password, phone, role)
 SELECT 1000 + t.seq,
        CONCAT('perf', LPAD(t.seq, 3, '0')),
-       '$2a$10$KQgWQUGKwZpPRk2ZGlStreknAczP6xGG2hz0y7bBC1d4D5JCF.LKC',
+       '$2a$10$jy5H9RlP5R.pGQxaQHBwluCbzllgtV6r2sg.MtsXojJV9ljD8/Ff.',
        NULL,
        0
 FROM (
