@@ -20,14 +20,17 @@ import com.hospital.mapper.PatientMapper;
 import com.hospital.mapper.ReportMapper;
 import com.hospital.mapper.ScheduleMapper;
 import com.hospital.service.DoctorWorkService;
+import com.hospital.util.SlotTimeUtil;
 import com.hospital.vo.doctor.WaitingVO;
 import com.hospital.vo.order.OrderVO;
 import com.hospital.vo.report.ReportVO;
+import com.hospital.vo.schedule.ScheduleVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -72,6 +75,27 @@ public class DoctorWorkServiceImpl implements DoctorWorkService {
             throw new BusinessException(ResultCode.SCHEDULE_NOT_OWNED);
         }
         return schedule;
+    }
+
+    @Override
+    public List<ScheduleVO> listMySchedules(Long doctorUserId) {
+        Doctor doctor = doctorMapper.selectOne(new LambdaQueryWrapper<Doctor>()
+                .eq(Doctor::getUserId, doctorUserId));
+        if (doctor == null) {
+            throw new BusinessException(ResultCode.DOCTOR_NOT_BOUND);
+        }
+
+        // 只多取一天之后的数据没意义：工作台只关心"还能出诊的时段"，
+        // 今天已结束的时段（如 12:00 后的上午）不再出现，避免医生对着空队列操作
+        List<Schedule> schedules = scheduleMapper.selectList(new LambdaQueryWrapper<Schedule>()
+                .eq(Schedule::getDoctorId, doctor.getId())
+                .ge(Schedule::getWorkDate, LocalDate.now())
+                .orderByAsc(Schedule::getWorkDate)
+                .orderByAsc(Schedule::getTimeSlot));
+        return schedules.stream()
+                .filter(schedule -> !SlotTimeUtil.isSlotEnded(schedule.getWorkDate(), schedule.getTimeSlot()))
+                .map(ScheduleVO::from)
+                .toList();
     }
 
     @Override

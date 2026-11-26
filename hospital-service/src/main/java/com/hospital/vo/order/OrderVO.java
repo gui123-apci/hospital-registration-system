@@ -45,6 +45,9 @@ public class OrderVO {
 
     private LocalDateTime deadlineTime;
 
+    /** 到院签到时间，为空表示还没签到；前端据此隐藏签到按钮 */
+    private LocalDateTime signTime;
+
     private LocalDateTime createTime;
 
     public static OrderVO from(Order order, Patient patient, Schedule schedule) {
@@ -61,6 +64,7 @@ public class OrderVO {
         OrderStatus status = OrderStatus.of(order.getStatus());
         vo.setStatusDesc(status == null ? null : status.getDesc());
         vo.setDeadlineTime(order.getDeadlineTime());
+        vo.setSignTime(order.getSignTime());
         vo.setCreateTime(order.getCreateTime());
         return vo;
     }

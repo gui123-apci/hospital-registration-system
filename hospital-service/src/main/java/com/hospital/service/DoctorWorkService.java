@@ -4,6 +4,7 @@ import com.hospital.dto.report.ReportCreateDTO;
 import com.hospital.vo.doctor.WaitingVO;
 import com.hospital.vo.order.OrderVO;
 import com.hospital.vo.report.ReportVO;
+import com.hospital.vo.schedule.ScheduleVO;
 
 import java.util.List;
 
@@ -12,6 +13,12 @@ import java.util.List;
  * doctorUserId 从 token 解出，服务端据此反查绑定的医生，校验排班归属。
  */
 public interface DoctorWorkService {
+
+    /**
+     * 当前医生的出诊排班：今天尚未结束的时段 + 未来排班，按日期、时段升序。
+     * 工作台据此渲染排班下拉框，id 直接用于候诊队列与叫号。
+     */
+    List<ScheduleVO> listMySchedules(Long doctorUserId);
 
     /**
      * 候诊队列：该排班下已签到未就诊的全部患者，按签到时间升序。

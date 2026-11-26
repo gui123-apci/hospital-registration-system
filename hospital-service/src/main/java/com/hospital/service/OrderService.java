@@ -20,6 +20,13 @@ public interface OrderService {
     OrderVO create(OrderCreateDTO dto, Long userId);
 
     /**
+     * 按 id 查当前账号名下的挂号单。
+     * 支付页只需要这一张单，不该拉整页列表再前端筛选；
+     * 归属校验放服务端，别人的订单 id 猜到了也读不到。
+     */
+    OrderVO getMine(Long orderId, Long userId);
+
+    /**
      * 我的订单：分页查当前账号名下的挂号单，倒序。
      *
      * @param status 订单状态筛选，null 表示不过滤

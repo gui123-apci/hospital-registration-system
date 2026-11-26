@@ -1,6 +1,7 @@
 package com.hospital.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.hospital.common.constant.PatientConstants;
 import com.hospital.common.enums.Relation;
 import com.hospital.common.exception.BusinessException;
@@ -110,12 +111,11 @@ public class PatientServiceImpl implements PatientService {
             }
         }
 
-        // 空串视为"没填"：不支持传空串清空身份证（清空是极边缘需求，语义单独设计）
-        String idCard = normalizeIdCard(dto.getIdCard());
-        // 列表接口返回的是脱敏值，前端若把含 * 的值原样提交回来，不能当成新身份证写库
-        if (idCard != null && idCard.contains("*")) {
-            idCard = null;
-        }
+        // 身份证：null = 不改；空串 = 显式清空（前端把身份证删掉再保存才会传空串）。
+        // 格式由 PatientUpdateDTO 的 @Pattern 在入口校验，含 * 的脱敏值会被直接拒绝
+        String rawIdCard = dto.getIdCard();
+        String idCard = normalizeIdCard(rawIdCard);
+        boolean clearIdCard = rawIdCard != null && idCard == null;
 
         // 身份证变了才查重（排除自己），改别的字段不碰唯一键
         if (idCard != null && !idCard.equals(exist.getIdCard())) {
@@ -138,6 +138,13 @@ public class PatientServiceImpl implements PatientService {
             patientMapper.updateById(exist);
         } catch (DuplicateKeyException e) {
             throw new BusinessException(ResultCode.ID_CARD_EXISTS);
+        }
+        // MyBatis-Plus 的 updateById 默认忽略 null 字段，清空必须单独发一条 SET id_card = NULL
+        if (clearIdCard) {
+            patientMapper.update(null, new LambdaUpdateWrapper<Patient>()
+                    .eq(Patient::getId, exist.getId())
+                    .set(Patient::getIdCard, null));
+            exist.setIdCard(null);
         }
         return PatientVO.from(exist);
     }

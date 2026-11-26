@@ -7,6 +7,7 @@ import com.hospital.service.DoctorWorkService;
 import com.hospital.vo.doctor.WaitingVO;
 import com.hospital.vo.order.OrderVO;
 import com.hospital.vo.report.ReportVO;
+import com.hospital.vo.schedule.ScheduleVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -32,6 +33,12 @@ import java.util.List;
 public class DoctorWorkController {
 
     private final DoctorWorkService doctorWorkService;
+
+    @Operation(summary = "我的出诊排班", description = "当前登录医生今天尚未结束的时段及未来排班，按日期、时段升序")
+    @GetMapping("/schedules")
+    public Result<List<ScheduleVO>> listMySchedules(@AuthenticationPrincipal LoginUser loginUser) {
+        return Result.success(doctorWorkService.listMySchedules(loginUser.getUserId()));
+    }
 
     @Operation(summary = "候诊队列", description = "该排班下已签到未就诊的全部患者，按签到时间排序（候诊大屏/医生端列表）")
     @GetMapping("/waiting")

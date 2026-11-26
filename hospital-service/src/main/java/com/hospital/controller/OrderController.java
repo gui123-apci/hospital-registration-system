@@ -13,6 +13,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -47,6 +48,13 @@ public class OrderController {
                                                 @RequestParam(required = false) Integer status,
                                                 @AuthenticationPrincipal LoginUser loginUser) {
         return Result.success(orderService.pageMine(pageNum, pageSize, status, loginUser.getUserId()));
+    }
+
+    @Operation(summary = "我的订单详情", description = "支付页按 id 取单，服务端校验订单归属")
+    @GetMapping("/{id}")
+    public Result<OrderVO> getMine(@PathVariable Long id,
+                                   @AuthenticationPrincipal LoginUser loginUser) {
+        return Result.success(orderService.getMine(id, loginUser.getUserId()));
     }
 
     @Operation(summary = "到院签到", description = "就诊日当天、时段结束前签到，防重复")

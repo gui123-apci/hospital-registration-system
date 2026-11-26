@@ -138,6 +138,21 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
+    public OrderVO getMine(Long orderId, Long userId) {
+        Order order = orderMapper.selectById(orderId);
+        if (order == null) {
+            throw new BusinessException(ResultCode.ORDER_NOT_FOUND);
+        }
+        // 归属校验：id 是连续自增的，不校验就等于谁都能读别人的就诊信息
+        if (!order.getUserId().equals(userId)) {
+            throw new BusinessException(ResultCode.ORDER_NOT_OWNED);
+        }
+        return OrderVO.from(order,
+                patientMapper.selectById(order.getPatientId()),
+                scheduleMapper.selectById(order.getScheduleId()));
+    }
+
+    @Override
     public PageResult<OrderVO> pageMine(int pageNum, int pageSize, Integer status, Long userId) {
         // 分页参数钳制：与科室/医生/排班的 page() 保持一致
         long pn = Math.max(pageNum, 1);
