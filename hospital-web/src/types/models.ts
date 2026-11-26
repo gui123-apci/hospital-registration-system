@@ -101,6 +101,18 @@ export interface WaitingPatient {
   signTime: string
 }
 
+export interface TriageSchedule {
+  scheduleId: number
+  doctorId: number
+  departmentId: number
+  doctorName: string
+  workDate: string
+  timeSlot: TimeSlot
+  leftNum: number
+  price: number
+}
+
 export interface TriageResult {
   answer: string
+  schedules: TriageSchedule[]
 }

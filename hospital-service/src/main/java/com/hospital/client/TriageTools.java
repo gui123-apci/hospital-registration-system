@@ -8,6 +8,7 @@ import com.hospital.entity.Schedule;
 import com.hospital.mapper.DepartmentMapper;
 import com.hospital.mapper.DoctorMapper;
 import com.hospital.mapper.ScheduleMapper;
+import com.hospital.vo.triage.TriageScheduleVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
@@ -37,6 +38,7 @@ public class TriageTools {
     private final DoctorMapper doctorMapper;
     private final ScheduleMapper scheduleMapper;
     private final ObjectMapper objectMapper;
+    private final TriageScheduleHolder scheduleHolder;
 
     @Tool(description = "查询医院全部科室列表，返回科室名称和简介")
     public String listDepartments() {
@@ -70,7 +72,7 @@ public class TriageTools {
         return toJson(list);
     }
 
-    @Tool(description = "查询指定科室最近 7 天内可预约的号源，返回医生、日期、时段、剩余号数和价格")
+    @Tool(description = "查询指定科室最近 7 天内可预约的号源，返回号源id、医生、日期、时段、剩余号数和价格")
     public String listSchedules(@ToolParam(description = "科室名称，如：心内科") String departmentName) {
         Department dept = findByDeptName(departmentName);
         if (dept == null) {
@@ -94,15 +96,33 @@ public class TriageTools {
                 .collect(Collectors.toMap(Doctor::getId, Doctor::getName));
 
         List<Map<String, Object>> list = new ArrayList<>();
+        List<TriageScheduleVO> holderList = new ArrayList<>();
         for (Schedule s : schedules) {
+            String doctorName = doctorNames.getOrDefault(s.getDoctorId(), "未知医生");
+            // 给模型看的：带上 scheduleId，模型才能明确"推荐哪个号源"
             Map<String, Object> m = new HashMap<>();
-            m.put("doctor", doctorNames.getOrDefault(s.getDoctorId(), "未知医生"));
+            m.put("scheduleId", s.getId());
+            m.put("doctor", doctorName);
             m.put("date", s.getWorkDate().toString());
             m.put("timeSlot", slotName(s.getTimeSlot()));
             m.put("leftNum", s.getLeftNum());
             m.put("price", s.getPrice());
             list.add(m);
+
+            // 给前端看的：结构化号源，三个 id 用于"一键挂号"跳转与校验
+            TriageScheduleVO vo = new TriageScheduleVO();
+            vo.setScheduleId(s.getId());
+            vo.setDoctorId(s.getDoctorId());
+            vo.setDepartmentId(s.getDepartmentId());
+            vo.setDoctorName(doctorName);
+            vo.setWorkDate(s.getWorkDate());
+            vo.setTimeSlot(s.getTimeSlot());
+            vo.setLeftNum(s.getLeftNum());
+            vo.setPrice(s.getPrice());
+            holderList.add(vo);
         }
+        // 工具执行结果对上层透明，这里显式暂存，供 Service 随 answer 一起返回给前端
+        scheduleHolder.put(holderList);
         return toJson(list);
     }
 

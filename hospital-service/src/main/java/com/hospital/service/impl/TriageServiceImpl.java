@@ -1,6 +1,7 @@
 package com.hospital.service.impl;
 
 import com.hospital.client.AiClient;
+import com.hospital.client.TriageScheduleHolder;
 import com.hospital.common.constant.RedisKeyConstants;
 import com.hospital.common.exception.BusinessException;
 import com.hospital.common.result.ResultCode;
@@ -11,6 +12,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 /**
  * AI 导诊实现（Agent 版）。
@@ -38,6 +41,7 @@ public class TriageServiceImpl implements TriageService {
 
     private final AiClient aiClient;
     private final StringRedisTemplate stringRedisTemplate;
+    private final TriageScheduleHolder scheduleHolder;
 
     @Override
     public TriageVO ask(TriageAskDTO dto, Long userId) {
@@ -49,13 +53,19 @@ public class TriageServiceImpl implements TriageService {
             throw new BusinessException(ResultCode.TRIAGE_TOO_FREQUENT);
         }
 
+        // 防御：上一次异常没清干净的号源残留先清掉，避免串到本次回答
+        scheduleHolder.clear();
         try {
             String answer = aiClient.chat(SYSTEM_PROMPT, symptoms);
-            return TriageVO.of(answer);
+            // take() 一次性消费工具执行时暂存的号源，随后 answer 一起返回
+            return TriageVO.of(answer, scheduleHolder.take());
         } catch (Exception e) {
             // 优雅降级：模型挂了不报 500，给一句友好提示。导诊是增值功能，不该拖垮患者体验
             log.warn("AI 导诊失败，优雅降级: {}", e.getMessage());
-            return TriageVO.of(DEGRADE_ANSWER);
+            return TriageVO.of(DEGRADE_ANSWER, List.of());
+        } finally {
+            // 双保险：成功路径 take 已清，失败路径靠这里兜底，确保线程池复用不串数据
+            scheduleHolder.clear();
         }
     }
 

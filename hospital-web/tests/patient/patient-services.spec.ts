@@ -55,7 +55,8 @@ const report: Report = {
 }
 
 const recommendation: TriageResult = {
-  answer: '建议挂呼吸内科。咳嗽、发热常见于呼吸道疾病，可以先到呼吸内科评估。'
+  answer: '建议挂呼吸内科。咳嗽、发热常见于呼吸道疾病，可以先到呼吸内科评估。',
+  schedules: []
 }
 
 function mountPage(component: Component) {

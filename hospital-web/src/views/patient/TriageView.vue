@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { triageApi } from '@/api/triage'
 import PageHeader from '@/components/PageHeader.vue'
+import { timeSlotLabel } from '@/utils/schedule'
 import type { TriageResult } from '@/types/models'
 
 const MAX_SYMPTOMS = 500
@@ -84,6 +85,22 @@ async function submit() {
         <p class="result-label">导诊建议</p>
         <p class="triage-answer">{{ result.answer }}</p>
       </div>
+
+      <div v-if="result.schedules?.length" class="schedules-card">
+        <p class="result-label">可预约号源</p>
+        <ul class="schedule-list">
+          <li v-for="s in result.schedules" :key="s.scheduleId" class="schedule-item">
+            <div class="schedule-info">
+              <span class="schedule-doctor">{{ s.doctorName }}</span>
+              <span class="schedule-meta">{{ s.workDate }} {{ timeSlotLabel(s.timeSlot) }} · 余 {{ s.leftNum }} 号 · ¥{{ s.price.toFixed(2) }}</span>
+            </div>
+            <RouterLink
+              class="book-link"
+              :to="{ path: '/patient/booking', query: { scheduleId: s.scheduleId, doctorId: s.doctorId, departmentId: s.departmentId } }"
+            >去挂号</RouterLink>
+          </li>
+        </ul>
+      </div>
     </section>
 
     <p class="medical-disclaimer">AI 导诊仅供参考，不能替代医生诊断。如症状加重，请及时就医。</p>
@@ -110,6 +127,13 @@ async function submit() {
 .recommendation-card { padding: 20px; border: 1px solid var(--color-border); border-radius: 16px; background: white; }
 .result-label { margin: 0 0 8px; color: var(--color-brand); font-size: 13px; font-weight: 700; }
 .triage-answer { margin: 0; color: var(--color-text); font-size: 14px; line-height: 1.9; white-space: pre-wrap; overflow-wrap: anywhere; }
+.schedules-card { padding: 20px; border: 1px solid var(--color-border); border-radius: 16px; background: white; }
+.schedule-list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.schedule-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 14px; border: 1px solid var(--color-border); border-radius: 12px; background: #fbfdfe; }
+.schedule-info { display: grid; gap: 4px; min-width: 0; }
+.schedule-doctor { color: var(--color-text); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.schedule-meta { color: var(--color-muted); font-size: 12px; line-height: 1.6; }
+.book-link { flex: none; padding: 9px 16px; border-radius: 10px; background: var(--color-brand); color: white; font-size: 13px; font-weight: 700; text-decoration: none; white-space: nowrap; }
 .medical-disclaimer { margin: 18px 0 0; color: var(--color-muted); font-size: 12px; line-height: 1.7; text-align: center; }
 @media (max-width: 560px) {
   .triage-page { padding: 20px 14px 28px; }
