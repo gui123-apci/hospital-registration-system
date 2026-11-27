@@ -42,6 +42,15 @@ public final class RedisKeyConstants {
     /** 幂等占位值：请求已受理但订单还没落库 */
     public static final String IDEMPOTENT_PENDING = "PENDING";
 
+    /** 定时任务分布式锁前缀，拼任务名：lock:task:{name} */
+    public static final String TASK_LOCK_PREFIX = "lock:task:";
+
+    /** 超时释放任务锁 TTL：任务本身几秒跑完并主动释放，留 5 分钟兜底防宕机锁死 */
+    public static final Duration TIMEOUT_TASK_LOCK_TTL = Duration.ofMinutes(5);
+
+    /** 就诊收尾任务锁 TTL：一天一次，留 30 分钟兜底 */
+    public static final Duration FINISH_TASK_LOCK_TTL = Duration.ofMinutes(30);
+
     private RedisKeyConstants() {
     }
 }

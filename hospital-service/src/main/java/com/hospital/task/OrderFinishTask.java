@@ -1,6 +1,8 @@
 package com.hospital.task;
 
+import com.hospital.common.constant.RedisKeyConstants;
 import com.hospital.service.OrderService;
+import com.hospital.util.DistributedLock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -16,11 +18,16 @@ import java.util.List;
  *
  * 分流依据只有一个字段 sign_time：有值（签到了但没叫完）→ 已就诊，无值 → 爽约。
  * 号源、库存、active_flag 都不动：时段已过，号已消耗，无重挂意义。
+ *
+ * 多实例部署：Redis 分布式锁保证只有一台执行。重复收尾本身幂等，锁只是避免白跑。
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class OrderFinishTask {
+
+    /** 分布式锁 key */
+    private static final String LOCK_KEY = RedisKeyConstants.TASK_LOCK_PREFIX + "order-finish";
 
     /** 每批处理条数 */
     private static final int BATCH_SIZE = 500;
@@ -29,9 +36,15 @@ public class OrderFinishTask {
     private static final int MAX_BATCHES = 4;
 
     private final OrderService orderService;
+    private final DistributedLock distributedLock;
 
     @Scheduled(cron = "0 0 22 * * ?")
     public void finishTodayOrders() {
+        distributedLock.runIfAcquired(LOCK_KEY, RedisKeyConstants.FINISH_TASK_LOCK_TTL,
+                this::doFinishTodayOrders);
+    }
+
+    private void doFinishTodayOrders() {
         int finished = 0;
         for (int batch = 0; batch < MAX_BATCHES; batch++) {
             List<Long> ids = orderService.listToFinishOrderIds(BATCH_SIZE);

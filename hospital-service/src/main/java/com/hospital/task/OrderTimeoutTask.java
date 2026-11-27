@@ -1,6 +1,8 @@
 package com.hospital.task;
 
+import com.hospital.common.constant.RedisKeyConstants;
 import com.hospital.service.OrderService;
+import com.hospital.util.DistributedLock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -14,13 +16,16 @@ import java.util.List;
  * 分批消费：每批 500 条、单轮最多 4 批（2000 条），剩下的下一分钟接着扫——
  * 服务停机重启或放号量大积压几千上万条时，不会一轮跑几十分钟把号一直占着。
  *
- * 多实例部署注意：@Scheduled 是单机的，起两个实例会重复扫同一批 id。
- * 不会错账（条件 UPDATE 幂等），但有无效锁竞争；上集群时再加 ShedLock/Redis 锁。
+ * 多实例部署：用 Redis 分布式锁保证同一时刻只有一个实例扫单。
+ * 即使锁失效导致重复执行也不会错账——释放逻辑是条件 UPDATE，天然幂等。
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class OrderTimeoutTask {
+
+    /** 分布式锁 key：所有实例抢同一把锁 */
+    private static final String LOCK_KEY = RedisKeyConstants.TASK_LOCK_PREFIX + "order-timeout";
 
     /** 每批处理条数 */
     private static final int BATCH_SIZE = 500;
@@ -29,6 +34,7 @@ public class OrderTimeoutTask {
     private static final int MAX_BATCHES = 4;
 
     private final OrderService orderService;
+    private final DistributedLock distributedLock;
 
     /**
      * 每 60 秒扫一次；fixedDelay 保证上一次跑完再计时，不会堆积；
@@ -36,6 +42,11 @@ public class OrderTimeoutTask {
      */
     @Scheduled(fixedDelay = 60_000, initialDelay = 30_000)
     public void releaseExpiredOrders() {
+        distributedLock.runIfAcquired(LOCK_KEY, RedisKeyConstants.TIMEOUT_TASK_LOCK_TTL,
+                this::doReleaseExpiredOrders);
+    }
+
+    private void doReleaseExpiredOrders() {
         int released = 0;
         for (int batch = 0; batch < MAX_BATCHES; batch++) {
             List<Long> ids = orderService.listExpiredWaitPayOrderIds(BATCH_SIZE);
