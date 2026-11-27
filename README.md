@@ -214,6 +214,22 @@ Get-Content load-test\reconcile-perf.sql | docker exec -i hospital-mysql mysql -
 
 **压测结论（退号回补）**：500 并发抢 20 个号 → 20 单支付后退号 → 同一批人再抢，**又成交 20**；对账 `left_num=0`、有效订单 20、锁定号源 20 全部 PASS，重复挂号 0。说明退号的逆向链路（订单让位 / 号源回可用 / 库存回补 / 缓存作废）是完整的。首轮另有 54 个请求被 Tomcat 的 accept 队列（默认 100）拒绝，属连接层现象，不是业务失败。
 
+### 实测吞吐（本地 Docker 单机，MySQL / Redis / 应用同机）
+
+| 场景 | 并发 | 吞吐 | p95 延迟 | 失败率 |
+|---|---|---|---|---|
+| 号源查询 `GET /schedule/list` | 100 VU | **2950 req/s** | 77 ms | 0% |
+| 挂号闭环（5 个排班分散） | 100 VU | **19 单/s**（63 req/s） | 1.23 s | 0% |
+| 挂号闭环（单排班热点） | 50 VU | **7 单/s** | 1.82 s | 0% |
+
+口径说明：挂号闭环 = 下单 → 支付 → 退号，单位是"完整成单/秒"；每单 3 个 HTTP 请求，所以 HTTP 层是 63 req/s。
+
+**结论**：读接口不是瓶颈；写链路受 `tb_schedule.left_num` 单行锁限制——同一排班的并发下单会串行排队。排班分散到 5 个后吞吐提升 2.7 倍、p95 下降 32%，验证了"库存行是热点"。生产环境的优化方向是库存分桶（把 20 个号拆成 4 个桶各 5 个，冲突降 4 倍）或按医生拆表，而不是加机器。
+
+压测脚本：`load-test/order-throughput.js`（写）、`load-test/query-throughput.js`（读）。
+
+**压测顺手抓到的真 bug**：高并发下退号与下单**死锁**——下单加锁顺序是 `schedule → number_source → order`，退号原本是 `order → number_source → schedule`，方向相反形成环。50 VU 时 40 单退号失败、订单卡在"已支付"，该就诊人再也挂不上号。修复方式是统一退号加锁顺序（先回补库存行），并把订单状态的条件 UPDATE 放到最后做最终校验。详见 `改进记录.md` 第三十条。
+
 **CI**：push / PR 自动跑前后端全量测试（`.github/workflows/ci.yml`，用 service 容器起 MySQL 8 + Redis 7 并导入 `sql/` 初始数据）。
 
 ## 九、项目结构

@@ -324,6 +324,8 @@ CREATE TABLE tb_notification (
 
 **关键面试点**：Lua 原子性、数据库唯一键兜底、库存预扣+延迟回补、条件 UPDATE 防并发、请求级幂等与唯一键的分工。
 
+**退号的加锁顺序**（必须与下单一致，否则高并发下死锁）：`tb_schedule` 回补库存 → `tb_number_source` 回可用 → `tb_order` 条件置退号并把 `active_flag` 置 NULL。下单是 `schedule → number_source → order`，退号若反着来会成环（压测实测 50 VU 时退号死锁、订单卡在已支付）。
+
 ### 7.2 规划方案（未实现）
 
 ```

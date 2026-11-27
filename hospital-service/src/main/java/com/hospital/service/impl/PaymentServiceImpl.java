@@ -136,18 +136,18 @@ public class PaymentServiceImpl implements PaymentService {
             throw new BusinessException(ResultCode.REFUND_NOT_ALLOWED);
         }
 
-        // 条件 UPDATE 抢"退号权" + 唯一键让位：active_flag 置 NULL，同一就诊人可再次挂同一排班
-        int rows = orderMapper.update(null, new LambdaUpdateWrapper<Order>()
-                .eq(Order::getId, order.getId())
-                .eq(Order::getStatus, OrderStatus.PAID.getCode())
-                .set(Order::getStatus, OrderStatus.REFUNDED.getCode())
-                .set(Order::getActiveFlag, null));
-        if (rows == 0) {
-            throw new BusinessException(ResultCode.ORDER_STATUS_ERROR);
-        }
+        // 加锁顺序必须和下单一致：schedule → number_source → order。
+        // 下单是「条件 UPDATE 扣库存（锁 schedule 行）→ 抢号源（锁 number_source 行）→ INSERT 订单」，
+        // 退号原本是「锁订单 → 锁号源 → 锁库存」，两条路径方向相反，高并发下 A 持 schedule 等 source、
+        // B 持 source 等 schedule，直接死锁（压测实测：50 VU 时退号死锁 40 单，订单卡在已支付）。
+        //
+        // 先回补库存：与下单第一步锁同一行，把冲突收口到最前面，后续步骤不再交叉等待。
+        scheduleMapper.update(null, new LambdaUpdateWrapper<Schedule>()
+                .eq(Schedule::getId, order.getScheduleId())
+                .setSql("left_num = left_num + 1"));
 
-        // 号源：已售出(2) → 可用(0)。查影响行数：0 行说明状态和预期不符（脏数据），
-        // 抛异常回滚整个退号——库存没回补、号也没让位，比账不平好得多
+        // 号源：已售出(2) → 可用(0)。0 行说明状态与预期不符（脏数据），
+        // 抛异常回滚整个退号——库存回补和号让位一起撤销，比账不平好得多
         int sourceRows = numberSourceMapper.update(null, new LambdaUpdateWrapper<NumberSource>()
                 .eq(NumberSource::getId, order.getSourceId())
                 .eq(NumberSource::getStatus, SourceStatus.SOLD.getCode())
@@ -157,10 +157,16 @@ public class PaymentServiceImpl implements PaymentService {
             throw new BusinessException(ResultCode.SYSTEM_ERROR);
         }
 
-        // 库存回补：数据库 +1
-        scheduleMapper.update(null, new LambdaUpdateWrapper<Schedule>()
-                .eq(Schedule::getId, order.getScheduleId())
-                .setSql("left_num = left_num + 1"));
+        // 最后条件 UPDATE 抢"退号权"+ 唯一键让位：active_flag 置 NULL，同一就诊人可再挂同一排班。
+        // rows == 0 说明订单已被并发退掉，抛异常把前面两步一并回滚
+        int rows = orderMapper.update(null, new LambdaUpdateWrapper<Order>()
+                .eq(Order::getId, order.getId())
+                .eq(Order::getStatus, OrderStatus.PAID.getCode())
+                .set(Order::getStatus, OrderStatus.REFUNDED.getCode())
+                .set(Order::getActiveFlag, null));
+        if (rows == 0) {
+            throw new BusinessException(ResultCode.ORDER_STATUS_ERROR);
+        }
 
         // 支付单退款：成功(1) → 退款(3)（一个订单只有一条支付单，uk_order_id 保证）
         Payment payment = paymentMapper.selectOne(new LambdaQueryWrapper<Payment>()
