@@ -32,6 +32,7 @@ import com.hospital.mapper.UserMapper;
 import com.hospital.service.DoctorWorkService;
 import com.hospital.service.OrderService;
 import com.hospital.service.PaymentService;
+import com.hospital.vo.order.OrderVO;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
@@ -324,6 +325,59 @@ class OrderConcurrencyTest {
         orderService.finishOrder(orderId);
         Order finished = orderMapper.selectById(orderId);
         assertThat(finished.getStatus()).isEqualTo(OrderStatus.FINISHED.getCode());
+    }
+
+    // ==================== 测试 6：下单幂等 ====================
+
+    @Test
+    void sameRequestIdCreatesOnlyOneOrder() {
+        long userId = createUser(0);
+        long patientId = createPatient(userId);
+        long scheduleId = createSchedule(createDoctor(createDepartment(), null), 3);
+        createNumberSources(scheduleId, 3);
+
+        OrderCreateDTO dto = new OrderCreateDTO();
+        dto.setScheduleId(scheduleId);
+        dto.setPatientId(patientId);
+        dto.setRequestId("req-" + nextSeq());
+
+        OrderVO first = orderService.create(dto, userId);
+        // 模拟"网络超时后用户重试"：同一 requestId 再发一次
+        OrderVO second = orderService.create(dto, userId);
+
+        // 幂等命中：返回同一张单，而不是报重复挂号
+        assertThat(second.getId()).isEqualTo(first.getId());
+        assertThat(second.getOrderNo()).isEqualTo(first.getOrderNo());
+
+        // 库里只有一单，库存只扣一次
+        Long orderCount = orderMapper.selectCount(new LambdaQueryWrapper<Order>()
+                .eq(Order::getScheduleId, scheduleId));
+        assertThat(orderCount).isEqualTo(1);
+        assertThat(scheduleMapper.selectById(scheduleId).getLeftNum()).isEqualTo(2);
+    }
+
+    @Test
+    void idempotentKeyReleasedOnBusinessFailure() {
+        long userId = createUser(0);
+        long patientId = createPatient(userId);
+        long scheduleId = createSchedule(createDoctor(createDepartment(), null), 3);
+        createNumberSources(scheduleId, 3);
+        String requestId = "req-" + nextSeq();
+
+        // 第一次：就诊人不存在 → 失败，幂等占位应被释放
+        OrderCreateDTO bad = new OrderCreateDTO();
+        bad.setScheduleId(scheduleId);
+        bad.setPatientId(999_999_999L);
+        bad.setRequestId(requestId);
+        assertThat(expectBusinessCode(() -> orderService.create(bad, userId)))
+                .isEqualTo(ResultCode.PATIENT_NOT_FOUND.getCode());
+
+        // 同一 requestId 换成正确参数重试 → 必须能正常下单（说明占位没把用户锁死）
+        OrderCreateDTO good = new OrderCreateDTO();
+        good.setScheduleId(scheduleId);
+        good.setPatientId(patientId);
+        good.setRequestId(requestId);
+        assertThat(orderService.create(good, userId).getId()).isNotNull();
     }
 
     // ==================== 数据构造 ====================

@@ -33,6 +33,15 @@ public final class RedisKeyConstants {
     /** 会话记忆最大轮数：只保留最近 10 轮（20 条消息），防止上下文过长 */
     public static final int TRIAGE_HISTORY_MAX_ROUNDS = 10;
 
+    /** 下单幂等 key 前缀，拼 userId + requestId：idempotent:order:{userId}:{requestId} */
+    public static final String IDEMPOTENT_PREFIX = "idempotent:order:";
+
+    /** 幂等窗口 5 分钟：覆盖用户网络超时后重试的场景，过期后 requestId 自动失效 */
+    public static final Duration IDEMPOTENT_TTL = Duration.ofMinutes(5);
+
+    /** 幂等占位值：请求已受理但订单还没落库 */
+    public static final String IDEMPOTENT_PENDING = "PENDING";
+
     private RedisKeyConstants() {
     }
 }

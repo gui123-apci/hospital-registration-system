@@ -157,8 +157,27 @@ describe('BookingView', () => {
     await flushPromises()
 
     expect(orderApi.create).toHaveBeenCalledTimes(1)
-    expect(orderApi.create).toHaveBeenCalledWith({ scheduleId: 41, patientId: 17 })
+    expect(orderApi.create).toHaveBeenCalledWith(expect.objectContaining({ scheduleId: 41, patientId: 17 }))
+    expect(typeof vi.mocked(orderApi.create).mock.calls[0][0].requestId).toBe('string')
     expect(router.push).toHaveBeenCalledWith({ path: '/patient/payment', query: { orderId: 99 } })
+  })
+
+  it('reuses the same requestId when retrying a failed submission', async () => {
+    vi.mocked(orderApi.create).mockRejectedValueOnce(new Error('网络超时'))
+    const wrapper = await mountLoadedBooking()
+    await selectPatient(wrapper)
+
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.text()).toContain('网络超时')
+
+    // 用户点重试：必须复用同一个幂等号，服务端才能识别为同一笔下单
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    const calls = vi.mocked(orderApi.create).mock.calls
+    expect(calls).toHaveLength(2)
+    expect(calls[1][0].requestId).toBe(calls[0][0].requestId)
   })
 
   it('ignores the booking response when the schedule changed mid-submit', async () => {

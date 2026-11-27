@@ -4,6 +4,8 @@ import type { Order, OrderStatus, PageResult, Result } from '@/types/models'
 export interface CreateOrderRequest {
   scheduleId: number
   patientId: number
+  /** 幂等号：同一笔下单重试时复用，服务端据此避免重复建单 */
+  requestId?: string
 }
 
 export interface CreateOrderResult {

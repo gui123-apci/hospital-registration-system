@@ -33,6 +33,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -67,6 +69,41 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public OrderVO create(OrderCreateDTO dto, Long userId) {
+        // 0. 请求级幂等：同一 requestId 只处理一次。
+        //    挡的是"网络超时后用户重试"——这种重试可能已经换了就诊人或排班，
+        //    uk_patient_schedule 唯一键挡不住，只能靠请求号识别
+        String idempotentKey = buildIdempotentKey(userId, dto.getRequestId());
+        boolean idempotentAcquired = false;
+        if (idempotentKey != null) {
+            try {
+                Boolean first = stringRedisTemplate.opsForValue().setIfAbsent(idempotentKey,
+                        RedisKeyConstants.IDEMPOTENT_PENDING, RedisKeyConstants.IDEMPOTENT_TTL);
+                if (Boolean.FALSE.equals(first)) {
+                    // 重复请求：已成功就返回同一张单，还在处理中则提示稍候
+                    return replayIdempotent(idempotentKey, userId);
+                }
+                idempotentAcquired = true;
+            } catch (DataAccessException e) {
+                // Redis 挂了不阻塞下单：幂等只是体验优化，唯一键仍是最终防线
+                log.warn("Redis 不可用，跳过下单幂等校验, userId={}", userId);
+            }
+        }
+
+        OrderVO result;
+        try {
+            result = doCreate(dto, userId);
+        } catch (RuntimeException e) {
+            // 业务失败立刻释放占位，允许用户拿同一个 requestId 重试
+            releaseIdempotent(idempotentKey, idempotentAcquired);
+            throw e;
+        }
+        // 事务提交后再回写订单号：否则并发重试会读到尚未提交的订单
+        markIdempotentAfterCommit(idempotentKey, idempotentAcquired, result.getId());
+        return result;
+    }
+
+    /** 下单主流程：校验 → Redis 削峰 → 数据库兜底落库 */
+    private OrderVO doCreate(OrderCreateDTO dto, Long userId) {
         // 1. 就诊人归属校验：只能给自己名下的就诊人挂号
         Patient patient = patientMapper.selectById(dto.getPatientId());
         if (patient == null) {
@@ -134,6 +171,94 @@ public class OrderServiceImpl implements OrderService {
         } catch (RuntimeException e) {
             repayStock(stockKey, redisDeducted);
             throw e;
+        }
+    }
+
+    /** 拼幂等 key；没传 requestId 返回 null 表示跳过幂等 */
+    private String buildIdempotentKey(Long userId, String requestId) {
+        if (requestId == null || requestId.isBlank()) {
+            return null;
+        }
+        return RedisKeyConstants.IDEMPOTENT_PREFIX + userId + ":" + requestId.trim();
+    }
+
+    /**
+     * 重复请求的回放：占位中 → 提示稍候；已成功 → 返回同一张单。
+     * 订单查不到（事务回滚 / 被清理）时释放 key，让用户能重试。
+     */
+    private OrderVO replayIdempotent(String key, Long userId) {
+        String value;
+        try {
+            value = stringRedisTemplate.opsForValue().get(key);
+        } catch (DataAccessException e) {
+            // 读到一半 Redis 挂了：宁可让用户重试，也不冒重复下单的险
+            throw new BusinessException(ResultCode.ORDER_REPEAT_SUBMIT);
+        }
+        if (value == null || RedisKeyConstants.IDEMPOTENT_PENDING.equals(value)) {
+            throw new BusinessException(ResultCode.ORDER_REPEAT_SUBMIT);
+        }
+        Order order;
+        try {
+            order = orderMapper.selectById(Long.valueOf(value));
+        } catch (NumberFormatException e) {
+            order = null;
+        }
+        if (order == null || !order.getUserId().equals(userId)) {
+            stringRedisTemplate.delete(key);
+            throw new BusinessException(ResultCode.ORDER_REPEAT_SUBMIT);
+        }
+        log.info("命中下单幂等，直接返回原订单, userId={}, orderId={}", userId, order.getId());
+        return OrderVO.from(order,
+                patientMapper.selectById(order.getPatientId()),
+                scheduleMapper.selectById(order.getScheduleId()));
+    }
+
+    /** 释放幂等占位（业务失败时调用），允许用同一 requestId 重试 */
+    private void releaseIdempotent(String key, boolean acquired) {
+        if (key == null || !acquired) {
+            return;
+        }
+        try {
+            stringRedisTemplate.delete(key);
+        } catch (DataAccessException e) {
+            log.warn("释放幂等占位失败（TTL 会自动清理）, key={}", key, e);
+        }
+    }
+
+    /**
+     * 事务提交后再把订单号写回幂等 key。
+     * 提前写会出现"重试读到 orderId，但订单还没提交"的假阴性，进而误删 key、第三次重试又下单。
+     */
+    private void markIdempotentAfterCommit(String key, boolean acquired, Long orderId) {
+        if (key == null || !acquired) {
+            return;
+        }
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    writeIdempotent(key, orderId);
+                }
+
+                @Override
+                public void afterCompletion(int status) {
+                    // 回滚兜底：catch 已释放过，这里防事务被容器标记回滚（如超时）时占位残留
+                    if (status != STATUS_COMMITTED) {
+                        releaseIdempotent(key, true);
+                    }
+                }
+            });
+        } else {
+            writeIdempotent(key, orderId);
+        }
+    }
+
+    private void writeIdempotent(String key, Long orderId) {
+        try {
+            stringRedisTemplate.opsForValue()
+                    .set(key, String.valueOf(orderId), RedisKeyConstants.IDEMPOTENT_TTL);
+        } catch (DataAccessException e) {
+            log.warn("回写幂等结果失败（TTL 会自动清理）, key={}", key, e);
         }
     }
 

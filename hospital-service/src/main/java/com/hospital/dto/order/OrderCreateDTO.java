@@ -2,6 +2,7 @@ package com.hospital.dto.order;
 
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /**
@@ -20,4 +21,11 @@ public class OrderCreateDTO {
     @NotNull(message = "就诊人不能为空")
     @Positive(message = "就诊人参数不合法")
     private Long patientId;
+
+    /**
+     * 幂等号：前端每次下单生成一个 UUID，失败重试时复用同一个值。
+     * 选填——不传则跳过幂等校验（兼容旧客户端与压测脚本）。
+     */
+    @Size(max = 64, message = "幂等号长度不能超过 64")
+    private String requestId;
 }

@@ -54,6 +54,7 @@ public enum ResultCode {
     SCHEDULE_NOT_OWNED(2063, "无权操作该排班"),
     NO_WAITING_PATIENT(2064, "当前无待就诊患者"),
     REPORT_NOT_ALLOWED(2065, "订单尚未开始就诊，无法开具报告"),
+    ORDER_REPEAT_SUBMIT(2066, "订单正在处理中，请勿重复提交"),
 
     TRIAGE_TOO_FREQUENT(2070, "导诊请求过于频繁，请稍后再试"),
 

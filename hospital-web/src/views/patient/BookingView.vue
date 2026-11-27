@@ -24,6 +24,18 @@ const createdOrderId = ref<number>()
 /** 排班/医生上下文版本：提交途中切换了链接，旧请求的结果就不再写回页面 */
 let contextVersion = 0
 
+/**
+ * 本次下单的幂等号：失败重试必须复用同一个值，服务端据此识别"同一笔下单"。
+ * 切换排班时才重新生成——换了排班就是另一笔下单，不该复用旧号。
+ */
+function createRequestId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `req-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+const requestId = ref(createRequestId())
+
 function readPositiveId(value: unknown) {
   if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) return null
   const id = Number(value)
@@ -87,7 +99,8 @@ async function submit() {
   try {
     const result = await orderApi.create({
       scheduleId: schedule.value.id,
-      patientId: selectedPatientId.value
+      patientId: selectedPatientId.value,
+      requestId: requestId.value
     })
     // 提交期间用户已经换了排班：这次结果属于旧上下文，不能跳去旧订单的支付页
     if (version !== contextVersion) return
@@ -114,6 +127,8 @@ watch(
     submitError.value = ''
     successMessage.value = ''
     createdOrderId.value = undefined
+    // 换了排班就是新的一笔下单，换新的幂等号
+    requestId.value = createRequestId()
     void reload()
   }
 )
