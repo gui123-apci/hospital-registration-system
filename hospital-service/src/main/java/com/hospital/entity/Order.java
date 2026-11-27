@@ -22,6 +22,9 @@ public class Order extends BaseEntity {
 
     private Long patientId;
 
+    /** 就诊人姓名快照：下单时写入，之后就诊人改名不影响历史订单 */
+    private String patientName;
+
     private Long scheduleId;
 
     private Long sourceId;

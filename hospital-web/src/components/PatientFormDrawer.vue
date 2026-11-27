@@ -62,9 +62,10 @@ function validate() {
   errors.relation = typeof form.relation === 'number'
     && relationOptions.some((option) => option.value === form.relation) ? '' : '请选择关系'
   errors.phone = form.phone.trim() && !isValidPhone(form.phone.trim()) ? '请输入正确的手机号' : ''
-  errors.idCard = form.idCard.trim()
-    && !isUnchangedMaskedIdCard(form.idCard.trim())
-    && !isValidIdCard(form.idCard.trim()) ? '请输入正确的身份证号' : ''
+  errors.idCard = !form.idCard.trim()
+    ? '请输入身份证号'
+    : !isUnchangedMaskedIdCard(form.idCard.trim()) && !isValidIdCard(form.idCard.trim())
+      ? '请输入正确的身份证号' : ''
   return !errors.name && !errors.relation && !errors.phone && !errors.idCard
 }
 
@@ -79,14 +80,13 @@ async function submit() {
     const phone = form.phone.trim()
     const idCard = form.idCard.trim()
     const payload: PatientCreateRequest = { name, relation: form.relation! }
-    if (phone) payload.phone = phone
     if (idCard && !isUnchangedMaskedIdCard(idCard)) payload.idCard = idCard
+    if (phone) payload.phone = phone
 
     let saved: Patient
     if (props.patient) {
       const update: PatientUpdateRequest = { id: props.patient.id, ...payload }
       if (!phone && props.patient.phone !== undefined) update.phone = ''
-      if (!idCard && props.patient.idCard !== undefined) update.idCard = ''
       saved = await patientApi.update(update)
     } else {
       saved = await patientApi.create(payload)
@@ -174,7 +174,7 @@ watch(() => props.patient, () => {
       </div>
 
       <div class="form-field">
-        <label for="patient-id-card">身份证号 <span class="optional-label">选填</span></label>
+        <label for="patient-id-card">身份证号 <span class="required-label">必填</span></label>
         <input
           id="patient-id-card"
           v-model="form.idCard"

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { inject, reactive, ref } from 'vue'
 import { routerKey } from 'vue-router'
-import { ElAlert, ElButton, ElForm, ElFormItem, ElInput } from 'element-plus'
+import { ElAlert, ElButton, ElForm, ElFormItem, ElInput, ElMessage } from 'element-plus'
 import type { FormRules } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { ApiError } from '@/api/http'
@@ -54,7 +54,9 @@ async function handleSubmit() {
   submitting.value = true
   try {
     await auth.register(form.phone, form.password)
-    if (router) await router.push('/patient/home')
+    // 注册只建账号，不自动建就诊人：直接送到就诊人管理页，先建档（真实姓名/身份证）再挂号
+    ElMessage.success('注册成功，请先添加就诊人')
+    if (router) await router.push('/patient/patients')
   } catch (reason) {
     errorMessage.value = reason instanceof ApiError ? reason.message : '注册失败，请稍后重试'
   } finally {

@@ -103,7 +103,10 @@ onMounted(reload)
         <ElSkeleton :rows="4" animated />
       </div>
       <ErrorState v-else-if="error" :message="error" @retry="reload" />
-      <EmptyState v-else-if="!patients.length" description="暂无就诊人，新增后挂号时可直接选择" />
+      <div v-else-if="!patients.length" class="patients-empty">
+        <EmptyState description="暂无就诊人，挂号前需先添加就诊人（真实姓名、身份证）" />
+        <ElButton type="primary" class="empty-add-button" @click="openCreate">添加就诊人</ElButton>
+      </div>
       <div v-else class="patient-list">
         <article v-for="patient in patients" :key="patient.id" class="patient-card">
           <div class="patient-heading">
@@ -111,6 +114,7 @@ onMounted(reload)
               <span class="patient-avatar" aria-hidden="true">{{ patient.name.slice(0, 1) }}</span>
               <div>
                 <strong class="patient-name">{{ patient.name }}</strong>
+                <span v-if="patient.name === '待完善'" class="incomplete-tag">请完善姓名</span>
                 <span class="relation-tag">{{ relationLabel(patient.relation) }}</span>
               </div>
             </div>
@@ -160,6 +164,8 @@ onMounted(reload)
 .add-button { min-height: 42px; padding: 10px 16px; border-radius: 10px; font-weight: 700; white-space: nowrap; }
 .success-alert { margin-bottom: 14px; }
 .patients-panel { min-height: 180px; }
+.patients-empty { display: grid; justify-items: center; gap: 4px; }
+.empty-add-button { min-height: 42px; padding: 10px 18px; border-radius: 10px; font-weight: 700; }
 .loading-list { display: grid; gap: 22px; padding: 22px; border: 1px solid var(--color-border); border-radius: 16px; background: white; }
 .patient-list { display: grid; gap: 14px; }
 .patient-card { padding: 18px; border: 1px solid var(--color-border); border-radius: 16px; background: white; box-shadow: 0 8px 24px rgba(18, 57, 74, .04); }
@@ -169,6 +175,7 @@ onMounted(reload)
 .patient-avatar { display: grid; width: 42px; height: 42px; flex: 0 0 auto; place-items: center; border-radius: 12px; background: var(--color-brand-soft); color: var(--color-brand-deep); font-size: 17px; font-weight: 700; }
 .patient-name { overflow-wrap: anywhere; color: var(--color-brand-deep); font-size: 17px; }
 .relation-tag { padding: 3px 8px; border-radius: 6px; background: var(--color-brand-soft); color: var(--color-brand); font-size: 12px; }
+.incomplete-tag { padding: 3px 8px; border-radius: 6px; background: #fef0f0; color: #f56c6c; font-size: 12px; }
 .edit-button { min-height: 40px; margin-left: 0; padding: 8px 4px; }
 .patient-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 4px; }
 .delete-button { min-height: 40px; margin-left: 0; padding: 8px 4px; }

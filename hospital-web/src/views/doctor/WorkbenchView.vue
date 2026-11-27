@@ -164,17 +164,39 @@ const { data: waiting, loading, error, reload } = useAsync(async () => {
 // 服务端排班回来后再恢复本机缓存的进行中就诊：排班已不属于当前医生（换了排班/被删）就丢弃
 const storedConsultation = readStoredConsultation(auth.user?.id)
 let consultationRestored = false
-watch(scheduleData, (list) => {
+watch(scheduleData, async (list) => {
   if (consultationRestored || list === null) return
   consultationRestored = true
-  if (!storedConsultation) return
-  if (!list.some((schedule) => schedule.id === storedConsultation.scheduleId)) {
-    clearStoredConsultation()
-    return
+
+  // 1. 优先从本地缓存恢复
+  if (storedConsultation) {
+    if (!list.some((schedule) => schedule.id === storedConsultation.scheduleId)) {
+      clearStoredConsultation()
+    } else {
+      scheduleId.value = storedConsultation.scheduleId
+      activeOrder.value = storedConsultation.order
+      void reload()
+      return
+    }
   }
-  scheduleId.value = storedConsultation.scheduleId
-  activeOrder.value = storedConsultation.order
-  void reload()
+
+  // 2. 本地无缓存，尝试从服务端恢复（就诊中订单只可能出现在今天）
+  const today = new Date().toISOString().slice(0, 10)
+  const todaySchedules = list.filter((s) => s.workDate === today)
+  for (const schedule of todaySchedules) {
+    try {
+      const order = await doctorWorkApi.currentConsultation(schedule.id)
+      if (order) {
+        scheduleId.value = schedule.id
+        activeOrder.value = order
+        persistConsultation(auth.user?.id, schedule.id, order)
+        void reload()
+        return
+      }
+    } catch {
+      // 单个排班查询失败不阻塞其他排班
+    }
+  }
 }, { immediate: true })
 void reloadSchedules()
 const canCall = computed(() => scheduleId.value !== undefined

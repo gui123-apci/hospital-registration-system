@@ -3,7 +3,9 @@ package com.hospital;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hospital.entity.Patient;
 import com.hospital.entity.User;
+import com.hospital.mapper.PatientMapper;
 import com.hospital.mapper.UserMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -37,6 +39,9 @@ class AuthFlowTest {
     @Autowired
     private UserMapper userMapper;
 
+    @Autowired
+    private PatientMapper patientMapper;
+
     /** 每个测试方法用不同手机号，避免和库里已有数据冲突 */
     private final String phone = "139" + String.format("%08d", System.currentTimeMillis() % 100_000_000L);
 
@@ -55,6 +60,11 @@ class AuthFlowTest {
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.username").value(phone))
                 .andExpect(jsonPath("$.data.role").value(0));
+
+        // 1.1 注册不自动建就诊人：就诊人需真实姓名/身份证，由患者自己建档后再挂号
+        User registered = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, phone));
+        assertThat(patientMapper.selectCount(new LambdaQueryWrapper<Patient>()
+                .eq(Patient::getUserId, registered.getId()))).isZero();
 
         // 2. 同一手机号重复注册，返回业务码 2001
         mockMvc.perform(post("/auth/register")

@@ -22,7 +22,8 @@ const router = { push: vi.fn() }
 
 vi.mock('vue-router', () => ({
   useRoute: () => route,
-  useRouter: () => router
+  useRouter: () => router,
+  RouterLink: { name: 'RouterLink', props: ['to'], template: '<a><slot /></a>' }
 }))
 
 vi.mock('element-plus', async (importOriginal) => {
@@ -76,7 +77,7 @@ const backendMessage = '挂号成功，请在30分钟内完成支付'
 
 async function mountLoadedBooking() {
   const wrapper = mount(BookingView, {
-    global: { stubs: { RouterLink: true } }
+    global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } }
   })
   await flushPromises()
   return wrapper
@@ -134,6 +135,15 @@ describe('BookingView', () => {
     const wrapper = await mountLoadedBooking()
 
     expect(wrapper.get('input').attributes('aria-label')).toBe('选择就诊人')
+  })
+
+  it('guides a patient without profiles to add one before booking', async () => {
+    vi.mocked(patientApi.list).mockResolvedValue([])
+    const wrapper = await mountLoadedBooking()
+
+    expect(wrapper.text()).toContain('暂无就诊人')
+    expect(wrapper.text()).toContain('去添加就诊人')
+    expect(wrapper.findComponent(NameIdSelect).exists()).toBe(false)
   })
 
   it('submits only the schedule and patient IDs for the selected patient', async () => {

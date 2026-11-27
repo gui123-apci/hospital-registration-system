@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { ElAlert, ElButton, ElMessage, ElSkeleton } from 'element-plus'
 import { doctorApi } from '@/api/doctor'
 import { orderApi } from '@/api/order'
@@ -150,7 +150,10 @@ onMounted(reload)
         <div class="card-heading">
           <h2 id="patient-title">选择就诊人</h2>
         </div>
-        <EmptyState v-if="!patients.length" description="暂无就诊人，请添加就诊人后再挂号" />
+        <div v-if="!patients.length" class="patients-empty">
+          <EmptyState description="暂无就诊人，请添加就诊人后再挂号（需填写真实姓名、身份证）" />
+          <RouterLink class="add-patient-link" to="/patient/patients">去添加就诊人</RouterLink>
+        </div>
         <NameIdSelect
           v-else
           v-model="selectedPatientId"
@@ -204,6 +207,9 @@ onMounted(reload)
 .visit-details .amount { color: #b05b36; font-size: 21px; }
 .info-card :deep(.el-select) { width: 100%; }
 .info-card :deep(.el-empty) { padding: 12px 0 4px; }
+.patients-empty { display: grid; justify-items: center; gap: 8px; }
+.add-patient-link { display: inline-block; padding: 9px 16px; border-radius: 10px; background: var(--color-brand); color: white; font-size: 14px; font-weight: 700; text-decoration: none; }
+.add-patient-link:hover { background: var(--color-brand-deep); }
 .form-alert { margin-top: 2px; }
 .submit-area { display: grid; gap: 12px; padding: 8px 2px 0; }
 .submit-area p { margin: 0; color: var(--color-muted); font-size: 12px; line-height: 1.7; text-align: center; }

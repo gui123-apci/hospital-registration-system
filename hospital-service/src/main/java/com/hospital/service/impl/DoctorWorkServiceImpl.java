@@ -201,6 +201,20 @@ public class DoctorWorkServiceImpl implements DoctorWorkService {
     }
 
     @Override
+    public OrderVO getCurrentConsultation(Long scheduleId, Long doctorUserId) {
+        Schedule schedule = checkOwnership(scheduleId, doctorUserId);
+        Order order = orderMapper.selectOne(new LambdaQueryWrapper<Order>()
+                .eq(Order::getScheduleId, scheduleId)
+                .eq(Order::getStatus, OrderStatus.IN_PROGRESS.getCode())
+                .last("LIMIT 1"));
+        if (order == null) {
+            return null;
+        }
+        Patient patient = patientMapper.selectById(order.getPatientId());
+        return OrderVO.from(order, patient, schedule);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public ReportVO createReport(ReportCreateDTO dto, Long doctorUserId) {
         Order order = orderMapper.selectById(dto.getOrderId());

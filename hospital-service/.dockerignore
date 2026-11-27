@@ -1,13 +1,5 @@
-# 构建上下文只需 target 里的成品 jar，其余全部排除，减少发给 daemon 的体积
-.git
-.idea
-*.iml
+# 构建上下文只留 pom 和源码：target 里是上一轮的本机构建产物，不该进镜像
+target/
+.git/
 *.log
-target/*.original
-target/classes/
-target/generated-sources/
-target/generated-test-sources/
-target/maven-status/
-target/maven-archiver/
-target/surefire-reports/
-target/test-classes/
+.idea/

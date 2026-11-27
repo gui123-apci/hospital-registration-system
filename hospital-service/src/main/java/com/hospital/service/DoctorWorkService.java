@@ -37,6 +37,12 @@ public interface DoctorWorkService {
     OrderVO completeConsultation(Long orderId, Long doctorUserId);
 
     /**
+     * 恢复当前接诊中的患者：医生刷新页面后，从服务端找回"就诊中"的订单。
+     * 解决 sessionStorage 被清空或换浏览器时，正在接诊的患者从工作台消失的问题。
+     */
+    OrderVO getCurrentConsultation(Long scheduleId, Long doctorUserId);
+
+    /**
      * 开具检验报告：仅限"就诊中/已就诊"订单，且订单所属排班归属当前医生。
      */
     ReportVO createReport(ReportCreateDTO dto, Long doctorUserId);

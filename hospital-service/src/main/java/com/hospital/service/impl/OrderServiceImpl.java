@@ -217,6 +217,7 @@ public class OrderServiceImpl implements OrderService {
         order.setOrderNo(String.valueOf(redisIdWorker.nextId("order")));
         order.setUserId(patient.getUserId());
         order.setPatientId(dto.getPatientId());
+        order.setPatientName(patient.getName());
         order.setScheduleId(dto.getScheduleId());
         order.setSourceId(source.getId());
         order.setAmount(schedule.getPrice());
@@ -363,7 +364,7 @@ public class OrderServiceImpl implements OrderService {
     @Override
     public List<Long> listToFinishOrderIds(int limit) {
         List<Order> orders = orderMapper.selectList(new LambdaQueryWrapper<Order>()
-                .eq(Order::getStatus, OrderStatus.PAID.getCode())
+                .in(Order::getStatus, OrderStatus.PAID.getCode(), OrderStatus.IN_PROGRESS.getCode())
                 .select(Order::getId, Order::getScheduleId)
                 .last("LIMIT " + limit));
         if (orders.isEmpty()) {
@@ -388,18 +389,30 @@ public class OrderServiceImpl implements OrderService {
     @Transactional(rollbackFor = Exception.class)
     public void finishOrder(Long orderId) {
         Order order = orderMapper.selectById(orderId);
-        if (order == null || !Integer.valueOf(OrderStatus.PAID.getCode()).equals(order.getStatus())) {
+        if (order == null) {
             return;
         }
-        // 已签到 → 已就诊；没签到 → 爽约。号源/库存/active_flag 都不动
-        int target = order.getSignTime() != null ? OrderStatus.FINISHED.getCode() : OrderStatus.NO_SHOW.getCode();
+        Integer status = order.getStatus();
+        boolean paid = Integer.valueOf(OrderStatus.PAID.getCode()).equals(status);
+        boolean inProgress = Integer.valueOf(OrderStatus.IN_PROGRESS.getCode()).equals(status);
+        if (!paid && !inProgress) {
+            return;
+        }
+        // 已支付：已签到 → 已就诊，没签到 → 爽约
+        // 就诊中：医生已叫号但未完成接诊，夜间强制收尾为已就诊
+        int target;
+        if (inProgress) {
+            target = OrderStatus.FINISHED.getCode();
+        } else {
+            target = order.getSignTime() != null ? OrderStatus.FINISHED.getCode() : OrderStatus.NO_SHOW.getCode();
+        }
         int rows = orderMapper.update(null, new LambdaUpdateWrapper<Order>()
                 .eq(Order::getId, orderId)
-                .eq(Order::getStatus, OrderStatus.PAID.getCode())
+                .eq(Order::getStatus, status)
                 .set(Order::getStatus, target));
         if (rows > 0) {
-            log.info("订单就诊状态收尾, orderId={}, target={}, signed={}",
-                    orderId, target, order.getSignTime() != null);
+            log.info("订单就诊状态收尾, orderId={}, from={}, target={}, signed={}",
+                    orderId, status, target, order.getSignTime() != null);
         }
     }
 }

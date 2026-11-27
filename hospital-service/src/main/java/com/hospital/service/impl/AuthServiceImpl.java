@@ -1,15 +1,12 @@
 package com.hospital.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.hospital.common.enums.Relation;
 import com.hospital.common.enums.UserRole;
 import com.hospital.common.exception.BusinessException;
 import com.hospital.common.result.ResultCode;
 import com.hospital.dto.auth.LoginDTO;
 import com.hospital.dto.auth.RegisterDTO;
-import com.hospital.entity.Patient;
 import com.hospital.entity.User;
-import com.hospital.mapper.PatientMapper;
 import com.hospital.mapper.UserMapper;
 import com.hospital.security.LoginUser;
 import com.hospital.service.AuthService;
@@ -37,8 +34,6 @@ public class AuthServiceImpl implements AuthService {
 
     private final UserMapper userMapper;
 
-    private final PatientMapper patientMapper;
-
     private final PasswordEncoder passwordEncoder;
 
     private final AuthenticationManager authenticationManager;
@@ -63,14 +58,9 @@ public class AuthServiceImpl implements AuthService {
         user.setRole(UserRole.PATIENT.getCode());
         userMapper.insert(user);
 
-        // 注册即建一个"本人"就诊人：姓名先用手机号占位，身份证号注册时拿不到，就诊人模块再补
-        Patient patient = new Patient();
-        patient.setUserId(user.getId());
-        patient.setName(dto.getPhone());
-        patient.setRelation(Relation.SELF.getCode());
-        patient.setPhone(dto.getPhone());
-        patientMapper.insert(patient);
-
+        // 注册只建账号，不自动创建就诊人：
+        // 就诊人需要真实姓名/身份证，注册时拿不到；用手机号占位会让医生端把手机号当患者姓名显示。
+        // 挂号前由患者自己添加就诊人（前端注册成功后直接引导到就诊人管理页）
         log.info("患者注册成功: userId={}, username={}", user.getId(), user.getUsername());
         return UserInfoVO.from(user);
     }

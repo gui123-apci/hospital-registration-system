@@ -20,8 +20,9 @@ public class PatientCreateDTO {
     @Size(max = 32, message = "姓名不能超过 32 字")
     private String name;
 
-    /** 18 位身份证，可空 */
-    @Pattern(regexp = "^(\\d{17}[\\dXx])?$", message = "身份证号格式不正确")
+    /** 18 位身份证，必填 */
+    @NotBlank(message = "身份证号不能为空")
+    @Pattern(regexp = "^\\d{17}[\\dXx]$", message = "身份证号格式不正确")
     private String idCard;
 
     /** 0本人 1父母 2子女 3其他 */

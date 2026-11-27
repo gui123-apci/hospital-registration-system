@@ -57,7 +57,7 @@ describe('RegisterView', () => {
     sessionStorage.clear()
   })
 
-  it('registers, logs in with the same credentials, and opens patient home', async () => {
+  it('registers, logs in with the same credentials, and opens patient profile management', async () => {
     vi.mocked(http.post)
       .mockResolvedValueOnce(registeredUser)
       .mockResolvedValueOnce(loginResponse)
@@ -75,7 +75,7 @@ describe('RegisterView', () => {
     })
     expect(sessionStorage.getItem('hospital_token')).toBe('registered-token')
     expect(push).toHaveBeenCalledTimes(1)
-    expect(push).toHaveBeenCalledWith('/patient/home')
+    expect(push).toHaveBeenCalledWith('/patient/patients')
   })
 
   it('does not navigate or persist a token when login after registration fails', async () => {

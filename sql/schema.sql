@@ -102,6 +102,7 @@ CREATE TABLE tb_order (
     order_no      VARCHAR(32) NOT NULL COMMENT '订单号（幂等/防重复）',
     user_id       BIGINT UNSIGNED NOT NULL COMMENT '账号',
     patient_id    BIGINT UNSIGNED NOT NULL COMMENT '就诊人',
+    patient_name  VARCHAR(32)  DEFAULT NULL COMMENT '就诊人姓名快照（下单时写入，改名不影响历史订单）',
     schedule_id   BIGINT UNSIGNED NOT NULL COMMENT '排班',
     source_id     BIGINT UNSIGNED NOT NULL COMMENT '号源',
     amount        DECIMAL(10,2) DEFAULT 0 COMMENT '金额',

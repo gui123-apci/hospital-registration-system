@@ -61,7 +61,14 @@ public class DoctorWorkController {
         return Result.success(doctorWorkService.completeConsultation(orderId, loginUser.getUserId()));
     }
 
-    @Operation(summary = "开具检验报告", description = "仅限已就诊订单，且订单归属当前医生")
+    @Operation(summary = "当前接诊患者", description = "查询该排班下就诊中的订单，供医生刷新页面后恢复工作状态")
+    @GetMapping("/current")
+    public Result<OrderVO> getCurrentConsultation(@RequestParam Long scheduleId,
+                                                  @AuthenticationPrincipal LoginUser loginUser) {
+        return Result.success(doctorWorkService.getCurrentConsultation(scheduleId, loginUser.getUserId()));
+    }
+
+    @Operation(summary = "开具检验报告", description = "仅限就诊中/已就诊订单，且订单归属当前医生")
     @PostMapping("/report")
     public Result<ReportVO> createReport(@Valid @RequestBody ReportCreateDTO dto,
                                          @AuthenticationPrincipal LoginUser loginUser) {

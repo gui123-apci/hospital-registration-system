@@ -1,6 +1,7 @@
 package com.hospital;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.hospital.common.constant.RedisKeyConstants;
 import com.hospital.common.enums.OrderStatus;
 import com.hospital.common.enums.PaymentStatus;
@@ -283,6 +284,46 @@ class OrderConcurrencyTest {
         // 4. 完成接诊：非"就诊中"订单不能被完成
         assertThat(expectBusinessCode(() -> doctorWorkService.completeConsultation(orderId, doctorUserId)))
                 .isEqualTo(ResultCode.ORDER_STATUS_ERROR.getCode());
+    }
+
+    // ==================== 测试 5：夜间收尾覆盖就诊中订单 ====================
+
+    @Test
+    void finishTaskCoversInProgressOrders() {
+        long patientUserId = createUser(0);
+        long patientId = createPatient(patientUserId);
+        long doctorUserId = createUser(2);
+        long departmentId = createDepartment();
+        long doctorId = createDoctor(departmentId, doctorUserId);
+        long scheduleId = createSchedule(doctorId, 3);
+        createNumberSources(scheduleId, 3);
+
+        // 创建订单 → 支付 → 签到 → 叫号（进入就诊中）
+        OrderCreateDTO dto = new OrderCreateDTO();
+        dto.setScheduleId(scheduleId);
+        dto.setPatientId(patientId);
+        orderService.create(dto, patientUserId);
+        Order order = findActiveOrder(scheduleId, patientId);
+        long orderId = order.getId();
+
+        PayDTO pay = new PayDTO();
+        pay.setOrderId(orderId);
+        paymentService.pay(pay, patientUserId);
+
+        // 签到要求排班是今天，测试排班是明天，直接写库模拟签到
+        orderMapper.update(null, new LambdaUpdateWrapper<Order>()
+                .eq(Order::getId, orderId)
+                .set(Order::getSignTime, java.time.LocalDateTime.now()));
+        doctorWorkService.callNext(scheduleId, doctorUserId);
+
+        // 确认订单已进入就诊中
+        Order inProgress = orderMapper.selectById(orderId);
+        assertThat(inProgress.getStatus()).isEqualTo(OrderStatus.IN_PROGRESS.getCode());
+
+        // 夜间收尾应把就诊中订单推到已就诊
+        orderService.finishOrder(orderId);
+        Order finished = orderMapper.selectById(orderId);
+        assertThat(finished.getStatus()).isEqualTo(OrderStatus.FINISHED.getCode());
     }
 
     // ==================== 数据构造 ====================

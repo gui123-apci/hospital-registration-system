@@ -147,6 +147,8 @@ describe('patient relation and privacy rules', () => {
     expect(http.get).toHaveBeenCalledTimes(2)
     expect(wrapper.get('.success-alert').text()).toContain('已删除就诊人 李患者')
     expect(wrapper.text()).toContain('暂无就诊人')
+    // 空列表必须给出可点的建档入口：注册后没有任何就诊人，不能只提示不给路
+    expect(buttonWithText(wrapper, '添加就诊人')).not.toBeNull()
   })
 
   it('displays backend delete errors and keeps the patient in the list', async () => {
@@ -257,12 +259,12 @@ describe('patient relation and privacy rules', () => {
     const wrapper = mountPage(PatientListView)
     await flushPromises()
     await openPatientDrawer(wrapper, '新增就诊人')
-    await fillPatientForm(wrapper, { name: '赵患者', relation: 3 })
+    await fillPatientForm(wrapper, { name: '赵患者', relation: 3, idCard: '11010519491231002X' })
 
     await wrapper.get('form').trigger('submit')
     await flushPromises()
 
-    expect(http.post).toHaveBeenCalledWith('/patient', { name: '赵患者', relation: 3 })
+    expect(http.post).toHaveBeenCalledWith('/patient', { name: '赵患者', relation: 3, idCard: '11010519491231002X' })
   })
 
   it('uses empty strings to clear existing optional fields during an update', async () => {
@@ -270,7 +272,6 @@ describe('patient relation and privacy rules', () => {
     await flushPromises()
     await openPatientDrawer(wrapper, '编辑')
     await wrapper.get('input[name="phone"]').setValue('')
-    await wrapper.get('input[name="idCard"]').setValue('')
 
     await wrapper.get('form').trigger('submit')
     await flushPromises()
@@ -279,8 +280,8 @@ describe('patient relation and privacy rules', () => {
       id: 17,
       name: '李患者',
       relation: 1,
-      phone: '',
-      idCard: ''
+      idCard: '11010519491231002X',
+      phone: ''
     })
   })
 
@@ -292,7 +293,7 @@ describe('patient relation and privacy rules', () => {
     const wrapper = mountPage(PatientListView)
     await flushPromises()
     await openPatientDrawer(wrapper, '新增就诊人')
-    await fillPatientForm(wrapper, { name: '赵患者', relation: 2 })
+    await fillPatientForm(wrapper, { name: '赵患者', relation: 2, idCard: '11010519491231002X' })
 
     await wrapper.get('form').trigger('submit')
     expect(buttonWithText(wrapper, '保存中…')!.attributes('disabled')).toBeDefined()
@@ -308,7 +309,7 @@ describe('patient relation and privacy rules', () => {
     const wrapper = mountPage(PatientListView)
     await flushPromises()
     await openPatientDrawer(wrapper, '新增就诊人')
-    await fillPatientForm(wrapper, { name: '赵患者', relation: 2 })
+    await fillPatientForm(wrapper, { name: '赵患者', relation: 2, idCard: '11010519491231002X' })
 
     await wrapper.get('form').trigger('submit')
     await flushPromises()
@@ -389,11 +390,12 @@ describe('PatientFormDrawer', () => {
     expect(wrapper.get('input[name="name"]').attributes('maxlength')).toBe('32')
     await wrapper.get('input[name="name"]').setValue(`  ${name}  `)
     await wrapper.get('select[name="relation"]').setValue('2')
+    await wrapper.get('input[name="idCard"]').setValue('11010519491231002X')
 
     await wrapper.get('form').trigger('submit')
     await flushPromises()
 
-    expect(http.post).toHaveBeenCalledWith('/patient', { name, relation: 2 })
+    expect(http.post).toHaveBeenCalledWith('/patient', { name, relation: 2, idCard: '11010519491231002X' })
   })
 
   it('rejects a trimmed 33-character name before calling the API', async () => {

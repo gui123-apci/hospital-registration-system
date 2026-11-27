@@ -54,15 +54,18 @@
 
 ### 订单状态机（tb_order.status）
 ```
-0 待支付 ──支付成功──▶ 1 已支付 ──就诊完成──▶ 3 已就诊
-   │                    ├──退号──────▶ 2 已退号
-   └─超时未付──▶ 4 已取消    └──未签到──▶ 5 已爽约
+0 待支付 ──支付成功──▶ 1 已支付 ──医生叫号──▶ 6 就诊中 ──完成接诊──▶ 3 已就诊
+   │                    │                                        ▲
+   │                    ├──退号──────▶ 2 已退号                    │
+   │                    │                                         │
+   └─超时未付──▶ 4 已取消  └──未签到(夜间收尾)──▶ 5 已爽约             │
+                                                              夜间收尾(就诊中)──┘
 ```
 
-### 就医完整闭环
+### 就医完整闭环（已实现）
 ```
-浏览排班 → 挂号(秒杀) → 支付(超时自动释放) → [就诊当天] 签到 → 进叫号队列(ZSet)
-→ 医生叫号 → 就诊完成 → 生成报告 → 患者查报告
+浏览排班 → 挂号(秒杀) → 支付(超时自动释放) → [就诊当天] 签到 → 进候诊队列
+→ 医生叫号 → 就诊中 → 完成接诊 → 生成报告 → 患者查报告
 ```
 
 ---
@@ -201,81 +204,145 @@ CREATE TABLE tb_report (
 
 ## 5. Redis 数据结构设计
 
+### 5.1 已实现
+
 | 场景 | Key | 结构 | TTL | 说明 |
 |------|-----|------|-----|------|
-| 号源库存 | `stock:schedule:{scheduleId}` | String | 无 | 预扣减，放号时预热 |
+| 号源库存 | `stock:{scheduleId}` | String | 1h | 懒加载回填 + Lua 原子扣减，防超卖 |
+| 登录态/JWT | 无（JWT 自包含） | - | 2h | 服务端不存会话，token 解析即鉴权 |
+
+### 5.2 规划方案（未实现）
+
+| 场景 | Key | 结构 | TTL | 说明 |
+|------|-----|------|-----|------|
 | 一人一单锁 | `lock:order:{patientId}:{scheduleId}` | String | 短(秒级) | 以就诊人为粒度 |
 | 排班缓存 | `cache:schedule:{scheduleId}` | Hash | 30min | 缓存穿透/击穿/雪崩场景 |
 | 防重复下单幂等 | `idempotent:order:{userId}:{scheduleId}` | String | 短 | 幂等 |
 | 未支付延迟释放 | `delay:order:pay` | ZSet | 无 | score=支付截止时间戳 |
 | 异步下单队列 | `stream:order` | Stream | 持久 | 消费者组削峰 |
 | 叫号队列 | `queue:call:{scheduleId}` | ZSet | 当日 | score=号序，签到入队 |
-| 登录态/JWT | `token:{userId}` | String | 2h | 会话 |
 | 验证码 | `code:{phone}` | String | 5min | 登录 |
 | AI 会话记忆 | `chat:history:{userId}` | List | 2h | 多轮对话 |
 | 向量检索(RAG) | `rag:doc:index` | Redis Search | 持久 | 就医知识库向量索引 |
 
 ---
 
-## 6. API 接口清单（节选核心）
+## 6. API 接口清单（已实现）
+
+### 认证与账号
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | /auth/register | 注册（仅建账号，不自动建就诊人）|
+| POST | /auth/login | 登录（JWT）|
+| GET  | /auth/me | 当前用户信息 |
 
 ### 患者端
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | /auth/login | 登录（JWT）|
 | GET  | /department/list | 科室列表 |
-| GET  | /schedule/list | 排班列表（含剩余号数，走缓存）|
-| POST | /order/create | 挂号下单（秒杀核心）|
-| POST | /order/pay | 模拟支付 |
-| POST | /order/sign | 到院签到（入叫号队列）|
-| POST | /order/cancel | 退号（号源回补）|
-| GET  | /order/my | 我的挂号单 |
+| GET  | /doctor/list | 医生列表 |
+| GET  | /schedule/list | 排班列表（含剩余号数）|
+| GET  | /patient/list | 我的就诊人列表 |
+| POST | /patient | 新增就诊人 |
+| PUT  | /patient | 编辑就诊人 |
+| DELETE | /patient/{id} | 删除就诊人 |
+| POST | /order | 挂号下单（Redis Lua + 数据库条件 UPDATE 双保险）|
+| GET  | /order/list | 我的挂号单 |
+| GET  | /order/{id} | 订单详情 |
+| POST | /order/sign | 到院签到 |
+| POST | /payment/pay | 模拟支付 |
+| POST | /payment/refund | 退号（号源回补）|
 | GET  | /report/list | 报告查询 |
-| POST | /ai/chat | AI 导诊（SSE 流式）|
+| POST | /triage/ask | AI 导诊（Function Calling，非流式）|
+
+### 医生端
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET  | /doctor-work/schedules | 我的出诊排班 |
+| GET  | /doctor-work/waiting | 候诊队列（已签到未就诊）|
+| POST | /doctor-work/call | 叫号（订单 → 就诊中）|
+| POST | /doctor-work/complete | 完成接诊（就诊中 → 已就诊）|
+| GET  | /doctor-work/current | 当前接诊患者（刷新恢复）|
+| POST | /doctor-work/report | 开具检验报告（就诊中/已就诊）|
 
 ### 管理端
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | /admin/department | 新增科室 |
-| POST | /admin/schedule | 放号（预热号源到 Redis）|
-| GET  | /admin/order | 订单管理 |
-| GET  | /admin/dashboard | 数据看板 |
-| POST | /doctor/call | 医生叫号 |
+| PUT  | /admin/department | 编辑科室 |
+| DELETE | /admin/department/{id} | 删除科室 |
+| GET  | /admin/department/page | 科室分页 |
+| POST | /admin/doctor | 新增医生（自动开户）|
+| PUT  | /admin/doctor | 编辑医生 |
+| DELETE | /admin/doctor/{id} | 删除医生 |
+| GET  | /admin/doctor/page | 医生分页 |
+| POST | /admin/schedule | 放号 |
+| PUT  | /admin/schedule | 编辑排班 |
+| DELETE | /admin/schedule/{id} | 停诊 |
+| GET  | /admin/schedule/page | 排班分页 |
 
 ---
 
 ## 7. 秒杀核心链路（防超卖）
 
+### 7.1 当前实现
+
 ```
-1. 管理端放号 → 号源写入 Redis（stock:schedule:{id} = total_num）
+1. 管理端放号 → 号源写入数据库（tb_number_source）
 2. 患者下单：
-   a. 幂等校验（idempotent key）
-   b. 一人一单校验（lock:order:{patientId}:{scheduleId}）
-   c. Lua 原子扣减库存（stock -1，库存<0 直接拒绝，防超卖）
-   d. 订单写入 Stream 异步处理
-3. 异步消费 → 生成订单（状态=待支付）→ 写入 ZSet（score=支付截止时间）
+   a. 就诊人归属校验（只能给自己名下的就诊人挂号）
+   b. 排班可预约校验（存在、未停诊、时段未过期）
+   c. 一人一单预查（uk_patient_schedule 唯一键兜底）
+   d. Redis 懒加载回填 + Lua 原子扣减库存（stock:{scheduleId}）
+   e. 数据库条件 UPDATE 兜底（left_num > 0 才扣，防超卖）
+3. 生成订单（状态=待支付），锁定号源
 4. 支付成功 → 订单状态=已支付，号源=已售出
-5. 定时任务扫描 ZSet → 超时未支付 → 订单=已取消，库存回补
+5. 定时任务扫描待支付订单 → 超时未支付 → 订单=已取消，库存回补
 ```
 
-**关键面试点**：Lua 原子性、分布式锁粒度（patientId）、库存预扣+延迟回补、下单幂等。
+**关键面试点**：Lua 原子性、数据库唯一键兜底、库存预扣+延迟回补、条件 UPDATE 防并发。
+
+### 7.2 规划方案（未实现）
+
+```
+1. 幂等校验（idempotent key）
+2. 一人一单分布式锁（lock:order:{patientId}:{scheduleId}）
+3. 订单写入 Stream 异步处理（消费者组削峰）
+4. 写入 ZSet 延迟释放（score=支付截止时间戳）
+```
 
 ---
 
 ## 8. AI 导诊 Agent 设计（分层）
 
-- **L1 RAG 问答**：就医流程/科室介绍/医保政策 → 文档切片 → Embedding → Redis 向量检索 → LLM 生成
+### 8.1 当前实现
+
 - **L2 Function Calling**：问"明天呼吸科还有号吗" → 调号源查询接口 → 返回实时数据；"帮我挂号" → 引导跳转
-- **L3 工程**：SSE 流式、会话记忆（Redis）、医疗合规护栏（拒答诊断类问题，只做流程答疑）
+- **L3 工程**：医疗合规护栏（拒答诊断类问题，只做流程答疑）、结构化号源返回（前端可跳转预约）
+
+### 8.2 规划方案（未实现）
+
+- **L1 RAG 问答**：就医流程/科室介绍/医保政策 → 文档切片 → Embedding → Redis 向量检索 → LLM 生成
+- **L3 工程**：SSE 流式输出、会话记忆（Redis）
 
 ---
 
 ## 9. 开发里程碑
 
-| 阶段 | 内容 | 产出 |
-|------|------|------|
-| M1 | 建表 + 基础 CRUD + 登录鉴权 | 可运行骨架 |
-| M2 | 挂号秒杀链路（预扣/Lua/锁/异步/释放/幂等） | 核心深线 |
-| M3 | 签到 + 叫号 + 退号 + 报告查询 | 闭环完整 |
-| M4 | AI 导诊 Agent | 差异化亮点 |
-| M5 | 压测(JMeter) + 部署文档 + 简历话术 | 交付物 |
+| 阶段 | 内容 | 产出 | 状态 |
+|------|------|------|------|
+| M1 | 建表 + 基础 CRUD + 登录鉴权 | 可运行骨架 | ✅ 已完成 |
+| M2 | 挂号秒杀链路（预扣/Lua/锁/释放） | 核心深线 | ✅ 已完成（异步/幂等为规划方案） |
+| M3 | 签到 + 叫号 + 就诊中 + 完成接诊 + 退号 + 报告查询 | 闭环完整 | ✅ 已完成 |
+| M4 | AI 导诊 Agent（Function Calling） | 差异化亮点 | ✅ 已完成（RAG/SSE 为规划方案） |
+| M5 | 压测(k6) + Docker 部署 + 文档 | 交付物 | ✅ 已完成 |
+| M6 | 医生账号自动开户 + 注册流程优化 | 数据一致性 | ✅ 已完成 |
+| M7 | 就诊中状态闭环 + 夜间收尾覆盖 + 服务端恢复 | 状态机健壮性 | ✅ 已完成 |
+
+### 规划方案（未排期）
+
+- 异步下单（Stream 消费者组）
+- 下单幂等（idempotent key）
+- RAG 知识库问答（向量检索）
+- SSE 流式输出
+- 数据看板（/admin/dashboard）

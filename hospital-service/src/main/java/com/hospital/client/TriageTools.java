@@ -8,6 +8,7 @@ import com.hospital.entity.Schedule;
 import com.hospital.mapper.DepartmentMapper;
 import com.hospital.mapper.DoctorMapper;
 import com.hospital.mapper.ScheduleMapper;
+import com.hospital.util.SlotTimeUtil;
 import com.hospital.vo.triage.TriageScheduleVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.tool.annotation.Tool;
@@ -79,7 +80,7 @@ public class TriageTools {
             return "未找到科室：" + departmentName;
         }
         LocalDate today = LocalDate.now();
-        // 可预约 = 未停诊(status=1) + 还有号(leftNum>0) + 日期在今天起 7 天内
+        // 可预约 = 未停诊(status=1) + 还有号(leftNum>0) + 日期在今天起 7 天内 + 时段未过期
         List<Schedule> schedules = scheduleMapper.selectList(new LambdaQueryWrapper<Schedule>()
                 .eq(Schedule::getDepartmentId, dept.getId())
                 .eq(Schedule::getStatus, 1)
@@ -88,6 +89,8 @@ public class TriageTools {
                 .lt(Schedule::getWorkDate, today.plusDays(7))
                 .orderByAsc(Schedule::getWorkDate)
                 .orderByAsc(Schedule::getTimeSlot));
+        // 过滤当天已过时段（与 OrderServiceImpl.create 的挂号门槛对齐）
+        schedules.removeIf(s -> SlotTimeUtil.isExpired(s.getWorkDate(), s.getTimeSlot()));
 
         // 一次查全科室医生，拼成 id→姓名，避免每个排班都回查医生表
         Map<Long, String> doctorNames = doctorMapper.selectList(new LambdaQueryWrapper<Doctor>()

@@ -55,7 +55,7 @@ public class OrderVO {
         vo.setId(order.getId());
         vo.setOrderNo(order.getOrderNo());
         vo.setPatientId(order.getPatientId());
-        vo.setPatientName(patient != null ? patient.getName() : null);
+        vo.setPatientName(order.getPatientName() != null ? order.getPatientName() : (patient != null ? patient.getName() : null));
         vo.setScheduleId(order.getScheduleId());
         vo.setWorkDate(schedule != null ? schedule.getWorkDate() : null);
         vo.setTimeSlot(schedule != null ? schedule.getTimeSlot() : null);

@@ -21,6 +21,9 @@ export const doctorWorkApi = {
   complete(orderId: number) {
     return http.post<Order>('/doctor-work/complete', null, { params: { orderId } })
   },
+  currentConsultation(scheduleId: number) {
+    return http.get<Order | null>('/doctor-work/current', { params: { scheduleId } })
+  },
   report(data: ReportCreateRequest) {
     return http.post<Report>('/doctor-work/report', data)
   }
