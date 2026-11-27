@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Flux;
 
 /**
  * 大模型客户端，基于 Spring AI 的 ChatClient 封装 DeepSeek。
@@ -47,5 +48,17 @@ public class AiClient {
             log.warn("AI 导诊调用失败, cause={}", e.getMessage());
             throw new IllegalStateException("AI 调用失败", e);
         }
+    }
+
+    /**
+     * 流式对话入口：返回 Flux<String>，每个元素是模型输出的一小段文本。
+     * 调用方（Controller）用 SseEmitter 把 Flux 桥接成 SSE 推给前端。
+     */
+    public Flux<String> chatStream(String systemPrompt, String userPrompt) {
+        return chatClient.prompt()
+                .system(systemPrompt)
+                .user(userPrompt)
+                .stream()
+                .content();
     }
 }

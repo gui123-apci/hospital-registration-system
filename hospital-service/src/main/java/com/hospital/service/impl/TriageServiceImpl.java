@@ -7,11 +7,13 @@ import com.hospital.common.exception.BusinessException;
 import com.hospital.common.result.ResultCode;
 import com.hospital.dto.triage.TriageAskDTO;
 import com.hospital.service.TriageService;
+import com.hospital.vo.triage.TriageScheduleVO;
 import com.hospital.vo.triage.TriageVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 
@@ -38,6 +40,9 @@ public class TriageServiceImpl implements TriageService {
 
     /** 模型挂掉时的优雅降级文案：承认服务不可用，引导患者走其他途径，而不是报错 */
     private static final String DEGRADE_ANSWER = "AI 导诊暂时不可用，请到科室列表自助选择或咨询导诊台。";
+
+    /** SSE 流中号源数据的标记前缀，前端据此区分文本和结构化数据 */
+    public static final String SCHEDULES_PREFIX = "[SCHEDULES]";
 
     private final AiClient aiClient;
     private final StringRedisTemplate stringRedisTemplate;
@@ -66,6 +71,36 @@ public class TriageServiceImpl implements TriageService {
         } finally {
             // 双保险：成功路径 take 已清，失败路径靠这里兜底，确保线程池复用不串数据
             scheduleHolder.clear();
+        }
+    }
+
+    @Override
+    public Flux<String> askStream(TriageAskDTO dto, Long userId) {
+        String symptoms = dto.getSymptoms().trim();
+        if (isRateLimited(userId)) {
+            throw new BusinessException(ResultCode.TRIAGE_TOO_FREQUENT);
+        }
+        scheduleHolder.clear();
+        return aiClient.chatStream(SYSTEM_PROMPT, symptoms)
+                .doOnError(e -> log.warn("AI 流式导诊失败: {}", e.getMessage()))
+                .onErrorResume(e -> Flux.just(DEGRADE_ANSWER))
+                // 流末尾追加号源数据，前端解析 [SCHEDULES] 前缀获取结构化号源
+                .concatWith(Flux.defer(() -> {
+                    List<TriageScheduleVO> schedules = scheduleHolder.take();
+                    if (schedules.isEmpty()) {
+                        return Flux.empty();
+                    }
+                    return Flux.just(SCHEDULES_PREFIX + toJson(schedules));
+                }))
+                .doFinally(signal -> scheduleHolder.clear());
+    }
+
+    private String toJson(List<TriageScheduleVO> schedules) {
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(schedules);
+        } catch (Exception e) {
+            log.warn("号源序列化失败: {}", e.getMessage());
+            return "[]";
         }
     }
 

@@ -3,20 +3,36 @@ import { computed, ref, watch } from 'vue'
 import { triageApi } from '@/api/triage'
 import PageHeader from '@/components/PageHeader.vue'
 import { timeSlotLabel } from '@/utils/schedule'
-import type { TriageResult } from '@/types/models'
+import type { TriageResult, TriageSchedule } from '@/types/models'
 
 const MAX_SYMPTOMS = 500
+const SCHEDULES_PREFIX = '[SCHEDULES]'
 const symptoms = ref('')
 const submitting = ref(false)
 const submitError = ref('')
 const result = ref<TriageResult | null>(null)
+const streamingText = ref('')
+const streamingSchedules = ref<TriageSchedule[]>([])
+const useStream = ref(false)
 const characterCount = computed(() => symptoms.value.length)
 const canSubmit = computed(() => Boolean(symptoms.value.trim())
   && characterCount.value <= MAX_SYMPTOMS
   && !submitting.value)
 
+const displayAnswer = computed(() => {
+  if (useStream.value && streamingText.value) return streamingText.value
+  return result.value?.answer ?? ''
+})
+
+const displaySchedules = computed(() => {
+  if (useStream.value && streamingSchedules.value.length) return streamingSchedules.value
+  return result.value?.schedules ?? []
+})
+
 watch(symptoms, () => {
   result.value = null
+  streamingText.value = ''
+  streamingSchedules.value = []
   submitError.value = ''
 })
 
@@ -24,6 +40,8 @@ async function submit() {
   if (submitting.value) return
   submitError.value = ''
   result.value = null
+  streamingText.value = ''
+  streamingSchedules.value = []
 
   if (!symptoms.value.trim()) {
     submitError.value = '请描述您的症状'
@@ -36,7 +54,21 @@ async function submit() {
 
   submitting.value = true
   try {
-    result.value = await triageApi.ask(symptoms.value.trim())
+    if (useStream.value) {
+      await triageApi.askStream(symptoms.value.trim(), (chunk) => {
+        if (chunk.startsWith(SCHEDULES_PREFIX)) {
+          try {
+            streamingSchedules.value = JSON.parse(chunk.slice(SCHEDULES_PREFIX.length))
+          } catch {
+            // 号源解析失败不影响文本显示
+          }
+        } else {
+          streamingText.value += chunk
+        }
+      })
+    } else {
+      result.value = await triageApi.ask(symptoms.value.trim())
+    }
   } catch (reason) {
     submitError.value = reason instanceof Error ? reason.message : '导诊服务暂时不可用，请稍后重试'
   } finally {
@@ -74,22 +106,28 @@ async function submit() {
 
       <p v-if="submitError" id="symptom-error" class="triage-error" role="alert">{{ submitError }}</p>
 
-      <button type="submit" class="submit-button" :disabled="!canSubmit">
-        {{ submitting ? '分析中…' : '获取就诊建议' }}
-      </button>
+      <div class="form-footer">
+        <label class="stream-toggle">
+          <input v-model="useStream" type="checkbox" :disabled="submitting">
+          流式输出（打字机效果）
+        </label>
+        <button type="submit" class="submit-button" :disabled="!canSubmit">
+          {{ submitting ? '分析中…' : '获取就诊建议' }}
+        </button>
+      </div>
       <p class="privacy-note">请勿填写身份证号、手机号等个人敏感信息。</p>
     </form>
 
-    <section v-if="result" class="triage-result" role="region" aria-label="导诊结果" aria-live="polite">
+    <section v-if="displayAnswer || displaySchedules.length" class="triage-result" role="region" aria-label="导诊结果" aria-live="polite">
       <div class="recommendation-card">
         <p class="result-label">导诊建议</p>
-        <p class="triage-answer">{{ result.answer }}</p>
+        <p class="triage-answer">{{ displayAnswer }}</p>
       </div>
 
-      <div v-if="result.schedules?.length" class="schedules-card">
+      <div v-if="displaySchedules.length" class="schedules-card">
         <p class="result-label">可预约号源</p>
         <ul class="schedule-list">
-          <li v-for="s in result.schedules" :key="s.scheduleId" class="schedule-item">
+          <li v-for="s in displaySchedules" :key="s.scheduleId" class="schedule-item">
             <div class="schedule-info">
               <span class="schedule-doctor">{{ s.doctorName }}</span>
               <span class="schedule-meta">{{ s.workDate }} {{ timeSlotLabel(s.timeSlot) }} · 余 {{ s.leftNum }} 号 · ¥{{ s.price.toFixed(2) }}</span>
@@ -120,7 +158,9 @@ async function submit() {
 .character-count { justify-self: end; margin-top: 7px; color: var(--color-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .character-count.is-over-limit { color: #b42318; font-weight: 700; }
 .triage-error { margin: 12px 0 0; padding: 11px 12px; border: 1px solid #f1b8b3; border-radius: 10px; background: #fff2f0; color: #9f2822; font-size: 13px; line-height: 1.6; }
-.submit-button { min-height: 48px; margin-top: 16px; padding: 11px 18px; border: 1px solid var(--color-brand); border-radius: 11px; background: var(--color-brand); color: white; font-size: 16px; font-weight: 700; cursor: pointer; }
+.form-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; }
+.stream-toggle { display: flex; align-items: center; gap: 6px; color: var(--color-muted); font-size: 13px; cursor: pointer; }
+.submit-button { min-height: 48px; padding: 11px 18px; border: 1px solid var(--color-brand); border-radius: 11px; background: var(--color-brand); color: white; font-size: 16px; font-weight: 700; cursor: pointer; }
 .submit-button:disabled { cursor: not-allowed; opacity: .6; }
 .privacy-note { margin: 10px 0 0; color: var(--color-muted); font-size: 12px; line-height: 1.6; text-align: center; }
 .triage-result { display: grid; gap: 14px; margin-top: 18px; }
@@ -140,5 +180,7 @@ async function submit() {
   .triage-form { padding: 17px 15px; }
   .triage-form textarea { min-height: 156px; }
   .recommendation-card { padding: 17px 15px; }
+  .form-footer { flex-direction: column; align-items: stretch; }
+  .stream-toggle { justify-content: center; }
 }
 </style>
