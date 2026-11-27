@@ -23,8 +23,20 @@ const SHOTS = [
   { role: 'patient', name: '03-schedules', path: '/patient/schedules', waitFor: '.schedule-card, .empty-state, .el-empty' },
   { role: 'patient', name: '04-orders', path: '/patient/orders', waitFor: '.order-card, .el-empty' },
   { role: 'patient', name: '05-triage', path: '/patient/triage', waitFor: 'textarea, .triage-input' },
+  // 通知铃铛：点开面板后截图，展示未读列表
+  {
+    role: 'patient',
+    name: '09-notification',
+    path: '/patient/schedules',
+    waitFor: '.notification-bell .bell-button',
+    action: async (page) => {
+      await page.click('.notification-bell .bell-button')
+      await page.waitForTimeout(600)
+    }
+  },
   { role: 'doctor', name: '06-doctor-schedules', path: '/doctor/schedules', waitFor: '.schedule-card, .el-empty' },
   { role: 'doctor', name: '07-workbench', path: '/doctor/workbench', waitFor: 'main' },
+  { role: 'admin', name: '02-admin-dashboard', path: '/admin/dashboard', waitFor: '.stat-cards, .chart-card' },
   { role: 'admin', name: '10-admin-doctors', path: '/admin/doctors', waitFor: 'table, .el-table' },
   { role: 'admin', name: '11-admin-schedules', path: '/admin/schedules', waitFor: 'table, .el-table' }
 ]
@@ -80,6 +92,8 @@ async function capture(page, shot) {
     await page.goto(`${BASE}${shot.path}`, { waitUntil: 'networkidle' })
     if (shot.waitFor) await page.waitForSelector(shot.waitFor, { timeout: 10000 }).catch(() => {})
     await page.waitForTimeout(400)
+    // 需要交互才能展示的页面（如点开通知铃铛）
+    if (shot.action) await shot.action(page)
     await page.screenshot({ path: resolve(OUT, `${shot.name}.png`), fullPage: false })
     console.log(`[OK] ${shot.name}.png`)
   } catch (error) {

@@ -73,7 +73,37 @@ AI 导诊 → 添加就诊人（实名）→ 挂号 → 支付 → 到院签到 
                                     ↘ 退号 / 超时未支付 → 库存与号源回补
 ```
 
-## 五、功能清单
+## 五、界面预览
+
+**患者端**
+
+| 登录 | 选号 |
+|---|---|
+| ![登录](.screenshots/01-login.png) | ![排班列表](.screenshots/03-schedules.png) |
+
+| 订单 | AI 导诊 |
+|---|---|
+| ![订单列表](.screenshots/04-orders.png) | ![AI 导诊](.screenshots/05-triage.png) |
+
+![站内通知](.screenshots/09-notification.png)
+
+**医生端**
+
+| 我的排班 | 工作台（叫号 / 完成接诊 / 开报告） |
+|---|---|
+| ![医生排班](.screenshots/06-doctor-schedules.png) | ![工作台](.screenshots/07-workbench.png) |
+
+**管理端**
+
+![数据看板](.screenshots/02-admin-dashboard.png)
+
+| 医生管理 | 排班管理 |
+|---|---|
+| ![医生管理](.screenshots/10-admin-doctors.png) | ![排班管理](.screenshots/11-admin-schedules.png) |
+
+> 截图由 `hospital-web/scripts/screenshot.mjs` 自动生成（Playwright 登录后逐页截取），改完 UI 重跑一次即可。
+
+## 六、功能清单
 
 **患者端**
 
@@ -97,7 +127,7 @@ AI 导诊 → 添加就诊人（实名）→ 挂号 → 支付 → 到院签到 
 - 我的出诊排班、候诊队列
 - 叫号 → 完成接诊、开具检验报告
 
-## 六、快速开始
+## 七、快速开始
 
 ### 演示账号
 
@@ -153,13 +183,13 @@ REDIS_PORT=6380
 
 前端通过 Vite proxy 把 `/api` 转发到 `localhost:8080` 并剥掉前缀，无需跨域配置。
 
-## 七、压测与测试
+## 八、压测与测试
 
 ```bash
-# 后端（10 个集成测试，连真实 MySQL + Redis，不 mock）
+# 后端（16 个集成测试，连真实 MySQL + Redis，不 mock）
 cd hospital-service && mvn test
 
-# 前端（326 个用例）
+# 前端（331 个用例）
 cd hospital-web && npm test -- --maxWorkers=4
 
 # 并发压测（k6）：下单不超卖
@@ -186,7 +216,7 @@ Get-Content load-test\reconcile-perf.sql | docker exec -i hospital-mysql mysql -
 
 **CI**：push / PR 自动跑前后端全量测试（`.github/workflows/ci.yml`，用 service 容器起 MySQL 8 + Redis 7 并导入 `sql/` 初始数据）。
 
-## 八、项目结构
+## 九、项目结构
 
 ```
 hospital-project/
@@ -201,7 +231,7 @@ hospital-project/
 └── load-test/              # k6 压测脚本
 ```
 
-## 九、刻意简化与未实现项
+## 十、刻意简化与未实现项
 
 为避免"宣传的术栈"与实现脱节，明确列出边界：
 
@@ -212,7 +242,7 @@ hospital-project/
 - **无分布式锁**：并发正确性由数据库唯一键与条件更新保证
 - 管理端**无数据看板**，无挂号单审核流程
 
-## 十、后续计划
+## 十一、后续计划
 
 - 接真实支付渠道（微信 / 支付宝异步回调），替换当前模拟支付
 - 补退号回补的 k6 脚本（当前压测只覆盖下单链路）
