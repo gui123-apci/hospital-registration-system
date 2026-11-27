@@ -836,7 +836,7 @@ describe('admin schedule route and navigation', () => {
     const wrapper = mount(AdminLayout, { global: { plugins: [router, pinia], stubs: { RouterView: true } } })
     await router.push('/forbidden')
     await flushPromises()
-    expect(wrapper.get('h1').text()).toBe('科室管理')
+    expect(wrapper.get('h1').text()).toBe('数据看板')
     wrapper.unmount()
   })
 })

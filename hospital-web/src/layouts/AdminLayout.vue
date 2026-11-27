@@ -7,10 +7,12 @@ const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 const heading = computed(() => ({
+  'admin-dashboard': '数据看板',
   'admin-departments': '科室管理',
   'admin-doctors': '医生管理',
   'admin-schedules': '排班管理'
-}[String(route.name)] ?? '科室管理'))
+}[String(route.name)] ?? '数据看板'))
+const dashboardActive = computed(() => route.name === 'admin-dashboard')
 const departmentsActive = computed(() => route.name === 'admin-departments')
 const doctorsActive = computed(() => route.name === 'admin-doctors')
 const schedulesActive = computed(() => route.name === 'admin-schedules')
@@ -29,6 +31,10 @@ function logout() {
         <div><strong>智慧医院</strong><span>运营管理平台</span></div>
       </div>
       <nav class="admin-nav" aria-label="管理导航">
+        <RouterLink to="/admin/dashboard" class="admin-nav-item" :class="{ 'is-active': dashboardActive }">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M7 16l4-6 4 4 5-8" /></svg>
+          <span>数据看板</span>
+        </RouterLink>
         <RouterLink to="/admin/departments" class="admin-nav-item" :class="{ 'is-active': departmentsActive }">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V7l8-4 8 4v14M2 21h20M8 10h2M14 10h2M8 14h2M14 14h2M9 21v-4h6v4" /></svg>
           <span>科室管理</span>

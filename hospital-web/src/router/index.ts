@@ -58,6 +58,7 @@ const router = createRouter({
       meta: { requiresAuth: true, roles: [1] as Role[] },
       redirect: '/admin/departments',
       children: [
+        { path: 'dashboard', name: 'admin-dashboard', component: () => import('@/views/admin/DashboardView.vue') },
         { path: 'departments', name: 'admin-departments', component: () => import('@/views/admin/DepartmentManageView.vue') },
         { path: 'doctors', name: 'admin-doctors', component: () => import('@/views/admin/DoctorManageView.vue') },
         { path: 'schedules', name: 'admin-schedules', component: () => import('@/views/admin/ScheduleManageView.vue') }

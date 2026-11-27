@@ -779,7 +779,7 @@ describe('AdminLayout doctor navigation', () => {
 
   it('defaults the heading to department management outside the two admin routes', async () => {
     const wrapper = await mountLayout('/forbidden')
-    expect(wrapper.get('h1').text()).toBe('科室管理')
+    expect(wrapper.get('h1').text()).toBe('数据看板')
     wrapper.unmount()
   })
 })
