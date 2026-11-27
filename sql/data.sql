@@ -27,13 +27,24 @@ INSERT INTO tb_doctor (id, department_id, name, title, intro) VALUES
 (5, 5, '陈晓燕', '副主任医师', '擅长儿童呼吸道感染'),
 (6, 1, '压测专用医生', '主治医师', '仅用于并发压测，请勿挂这个号做演示');
 
--- ---------- 2.1 医生登录账号（role=2），doctor001 / admin123 ----------
+-- ---------- 2.1 医生登录账号（role=2），doctor001~doctor005 / admin123 ----------
 -- 医生端叫号、开报告按 tb_doctor.user_id 反查医生，没有绑定账号就无法登录工作台。
--- id 避开压测账号段（1001~1500），绑定 id=1 的医生
+-- 管理端新增医生时会自动开户（DoctorServiceImpl.create），这里是预置演示数据
+-- id 101~105，避开压测账号段（1001~1500）
 -- 哈希是 admin123 的 BCrypt 密文（与后端启动时创建的 admin 账号同一个密码，已实测可登录）
 INSERT INTO tb_user (id, username, password, phone, role) VALUES
 (101, 'doctor001', '$2a$10$jy5H9RlP5R.pGQxaQHBwluCbzllgtV6r2sg.MtsXojJV9ljD8/Ff.', '13800000001', 2);
-UPDATE tb_doctor SET user_id = 101 WHERE id = 1;
+
+-- 其余医生复用同一初始密码哈希：一处维护密文，避免抄错
+SET @doctor_pwd = (SELECT password FROM tb_user WHERE username = 'doctor001');
+INSERT INTO tb_user (id, username, password, phone, role) VALUES
+(102, 'doctor002', @doctor_pwd, '13800000002', 2),
+(103, 'doctor003', @doctor_pwd, '13800000003', 2),
+(104, 'doctor004', @doctor_pwd, '13800000004', 2),
+(105, 'doctor005', @doctor_pwd, '13800000005', 2);
+
+-- 医生 id 与账号 id 差 100，一一绑定
+UPDATE tb_doctor SET user_id = id + 100 WHERE id BETWEEN 1 AND 5;
 
 -- ---------- 3. 排班：明天，每个 20 个号 ----------
 -- 前 5 条用于演示，id=9001 是压测专用排班（下午时段，避开演示排班）
