@@ -14,7 +14,7 @@
 | 语言 / 运行时 | JDK 17 |
 | 框架 | Spring Boot 3.4.5、Spring Security（JWT） |
 | 持久层 | MyBatis-Plus 3.5.12（含 `mybatis-plus-jsqlparser`）、MySQL 8 |
-| 缓存 | Redis 7（库存预扣、导诊限流） |
+| 缓存 | Redis 7（库存预扣、下单幂等、导诊限流与会话记忆、定时任务锁） |
 | AI | Spring AI 1.0（`spring-ai-starter-model-anthropic`，经 Anthropic 兼容协议接 DeepSeek） |
 | 前端 | Vue 3 + TypeScript + Vite + Element Plus + Pinia + Vue Router |
 | 接口文档 | Knife4j（UI）+ springdoc-openapi 2.8.9（文档引擎） |
@@ -36,7 +36,7 @@ flowchart LR
 
 - 2 个前端工程形态：患者端 / 管理端，医生作为独立角色区（`/doctor`），不单独拆工程
 - 1 个后端单体，controller / service / mapper 分层
-- 中间件只有 MySQL + Redis。**没有消息队列、没有分布式锁、没有向量库**——并发正确性由「Lua 原子扣减 + 数据库条件更新 + 唯一键」三道保证
+- 中间件只有 MySQL + Redis。**没有消息队列、没有向量库、没有 Redisson 这类重型锁框架**——并发正确性由「Lua 原子扣减 + 数据库条件更新 + 唯一键」三道保证；只有定时任务用一个 60 行的轻量 Redis 锁收口多实例重复执行
 
 ## 四、核心亮点
 
@@ -83,7 +83,8 @@ AI 导诊 → 添加就诊人（实名）→ 挂号 → 支付 → 到院签到 
 - 挂号下单、我的订单（分页 + 状态筛选）
 - 模拟支付、退号退款、到院签到
 - 检验报告查询
-- AI 导诊
+- 站内通知（支付成功、医生叫号提醒，铃铛角标，30 秒轮询未读数）
+- AI 导诊（Function Calling Agent：查科室 / 医生 / 号源 / 就医知识库，支持 SSE 流式输出与会话记忆）
 
 **管理端（管理员）**
 

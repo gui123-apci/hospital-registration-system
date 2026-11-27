@@ -198,6 +198,20 @@ CREATE TABLE tb_report (
     KEY idx_patient_id (patient_id),
     KEY idx_order_id (order_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='检验报告表';
+
+-- ============ 10. 站内通知 ============
+CREATE TABLE tb_notification (
+    id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
+    user_id     BIGINT UNSIGNED NOT NULL COMMENT '接收用户',
+    type        TINYINT      NOT NULL COMMENT '类型：1支付成功 2叫号 3报告出具',
+    title       VARCHAR(64)  NOT NULL COMMENT '标题',
+    content     VARCHAR(255) NOT NULL COMMENT '正文',
+    read_flag   TINYINT      NOT NULL DEFAULT 0 COMMENT '0未读 1已读',
+    create_time DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (id),
+    KEY idx_user_read (user_id, read_flag, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='站内通知表';
 ```
 
 ---
@@ -209,21 +223,23 @@ CREATE TABLE tb_report (
 | 场景 | Key | 结构 | TTL | 说明 |
 |------|-----|------|-----|------|
 | 号源库存 | `stock:{scheduleId}` | String | 1h | 懒加载回填 + Lua 原子扣减，防超卖 |
+| 下单幂等 | `idempotent:order:{userId}:{requestId}` | String | 5min | 先占位 `PENDING`，事务提交后回写订单号；重试直接返回原单 |
+| 导诊限流 | `triage:lock:{userId}` | String | 5s | Agent 一次回答多次调模型，防连点烧钱 |
+| AI 会话记忆 | `triage:history:{userId}` | List | 2h | 最近 10 轮（20 条）JSON 消息，`TRIM` 截断 |
+| 定时任务锁 | `lock:task:{taskName}` | String | 5min / 30min | 多实例只有一台执行；释放时 Lua 校验 token |
 | 登录态/JWT | 无（JWT 自包含） | - | 2h | 服务端不存会话，token 解析即鉴权 |
 
 ### 5.2 规划方案（未实现）
 
 | 场景 | Key | 结构 | TTL | 说明 |
 |------|-----|------|-----|------|
-| 一人一单锁 | `lock:order:{patientId}:{scheduleId}` | String | 短(秒级) | 以就诊人为粒度 |
+| 一人一单锁 | `lock:order:{patientId}:{scheduleId}` | String | 短(秒级) | 以就诊人为粒度；当前由唯一键兜底，无需锁 |
 | 排班缓存 | `cache:schedule:{scheduleId}` | Hash | 30min | 缓存穿透/击穿/雪崩场景 |
-| 防重复下单幂等 | `idempotent:order:{userId}:{scheduleId}` | String | 短 | 幂等 |
 | 未支付延迟释放 | `delay:order:pay` | ZSet | 无 | score=支付截止时间戳 |
 | 异步下单队列 | `stream:order` | Stream | 持久 | 消费者组削峰 |
-| 叫号队列 | `queue:call:{scheduleId}` | ZSet | 当日 | score=号序，签到入队 |
+| 叫号队列 | `queue:call:{scheduleId}` | ZSet | 当日 | score=号序，签到入队；当前直接查 MySQL 按签到时间排序 |
 | 验证码 | `code:{phone}` | String | 5min | 登录 |
-| AI 会话记忆 | `chat:history:{userId}` | List | 2h | 多轮对话 |
-| 向量检索(RAG) | `rag:doc:index` | Redis Search | 持久 | 就医知识库向量索引 |
+| 向量检索(RAG) | `rag:doc:index` | Redis Search | 持久 | 就医知识库向量索引；当前用内置 Map 关键词匹配 |
 
 ---
 
@@ -253,7 +269,12 @@ CREATE TABLE tb_report (
 | POST | /payment/pay | 模拟支付 |
 | POST | /payment/refund | 退号（号源回补）|
 | GET  | /report/list | 报告查询 |
-| POST | /triage/ask | AI 导诊（Function Calling，非流式）|
+| GET  | /notification/list | 我的通知列表（默认 20 条）|
+| GET  | /notification/unread-count | 未读数（铃铛角标）|
+| POST | /notification/{id}/read | 单条标记已读 |
+| POST | /notification/read-all | 全部标记已读 |
+| POST | /triage/ask | AI 导诊（Function Calling Agent，含会话记忆）|
+| POST | /triage/ask/stream | AI 导诊流式输出（SSE，末尾追加结构化号源）|
 
 ### 医生端
 | 方法 | 路径 | 说明 |
@@ -290,25 +311,25 @@ CREATE TABLE tb_report (
 ```
 1. 管理端放号 → 号源写入数据库（tb_number_source）
 2. 患者下单：
-   a. 就诊人归属校验（只能给自己名下的就诊人挂号）
-   b. 排班可预约校验（存在、未停诊、时段未过期）
-   c. 一人一单预查（uk_patient_schedule 唯一键兜底）
-   d. Redis 懒加载回填 + Lua 原子扣减库存（stock:{scheduleId}）
-   e. 数据库条件 UPDATE 兜底（left_num > 0 才扣，防超卖）
+   a. 请求级幂等（idempotent:order:{userId}:{requestId}，重试返回原单）
+   b. 就诊人归属校验（只能给自己名下的就诊人挂号）
+   c. 排班可预约校验（存在、未停诊、时段未过期）
+   d. 一人一单预查（uk_patient_schedule 唯一键兜底）
+   e. Redis 懒加载回填 + Lua 原子扣减库存（stock:{scheduleId}）
+   f. 数据库条件 UPDATE 兜底（left_num > 0 才扣，防超卖）
 3. 生成订单（状态=待支付），锁定号源
 4. 支付成功 → 订单状态=已支付，号源=已售出
-5. 定时任务扫描待支付订单 → 超时未支付 → 订单=已取消，库存回补
+5. 定时任务扫描待支付订单（Redis 分布式锁防多实例重复）→ 超时未支付 → 订单=已取消，库存回补
 ```
 
-**关键面试点**：Lua 原子性、数据库唯一键兜底、库存预扣+延迟回补、条件 UPDATE 防并发。
+**关键面试点**：Lua 原子性、数据库唯一键兜底、库存预扣+延迟回补、条件 UPDATE 防并发、请求级幂等与唯一键的分工。
 
 ### 7.2 规划方案（未实现）
 
 ```
-1. 幂等校验（idempotent key）
-2. 一人一单分布式锁（lock:order:{patientId}:{scheduleId}）
-3. 订单写入 Stream 异步处理（消费者组削峰）
-4. 写入 ZSet 延迟释放（score=支付截止时间戳）
+1. 一人一单分布式锁（lock:order:{patientId}:{scheduleId}）——当前唯一键已够用
+2. 订单写入 Stream 异步处理（消费者组削峰）
+3. 写入 ZSet 延迟释放（score=支付截止时间戳）
 ```
 
 ---
@@ -317,13 +338,13 @@ CREATE TABLE tb_report (
 
 ### 8.1 当前实现
 
-- **L2 Function Calling**：问"明天呼吸科还有号吗" → 调号源查询接口 → 返回实时数据；"帮我挂号" → 引导跳转
-- **L3 工程**：医疗合规护栏（拒答诊断类问题，只做流程答疑）、结构化号源返回（前端可跳转预约）
+- **L2 Function Calling**：4 个工具——查科室、查医生、查最近 7 天可约号源、查就医知识库；模型自己决定调用链路与次数
+- **L3 工程**：SSE 流式输出（流末尾追加结构化号源）、Redis 会话记忆（最近 10 轮）、5 秒限流、模型故障优雅降级
+- **医疗合规护栏**：拒答诊断类问题，只做流程答疑；危险症状提醒尽快就医
 
 ### 8.2 规划方案（未实现）
 
-- **L1 RAG 问答**：就医流程/科室介绍/医保政策 → 文档切片 → Embedding → Redis 向量检索 → LLM 生成
-- **L3 工程**：SSE 流式输出、会话记忆（Redis）
+- **L1 RAG 向量检索**：就医流程/科室介绍/医保政策 → 文档切片 → Embedding → Redis 向量检索 → LLM 生成；当前用内置 Map 关键词匹配代替
 
 ---
 
@@ -338,11 +359,12 @@ CREATE TABLE tb_report (
 | M5 | 压测(k6) + Docker 部署 + 文档 | 交付物 | ✅ 已完成 |
 | M6 | 医生账号自动开户 + 注册流程优化 | 数据一致性 | ✅ 已完成 |
 | M7 | 就诊中状态闭环 + 夜间收尾覆盖 + 服务端恢复 | 状态机健壮性 | ✅ 已完成 |
+| M8 | 数据看板 + SSE 流式 + 会话记忆 + 就医知识库 + 下单幂等 + 任务分布式锁 + 站内通知 | 生产化收尾 | ✅ 已完成 |
 
 ### 规划方案（未排期）
 
 - 异步下单（Stream 消费者组）
-- 下单幂等（idempotent key）
-- RAG 知识库问答（向量检索）
-- SSE 流式输出
-- 数据看板（/admin/dashboard）
+- RAG 向量检索（当前为内置知识库关键词匹配）
+- 排班缓存（cache:schedule）
+- 验证码登录
+- 消息推送外发（短信/微信，当前只有站内信）

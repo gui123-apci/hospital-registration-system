@@ -154,3 +154,17 @@ CREATE TABLE tb_report (
     KEY idx_patient_id (patient_id),
     KEY idx_order_id (order_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='检验报告表';
+
+-- ============ 10. 站内通知 ============
+CREATE TABLE tb_notification (
+    id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
+    user_id     BIGINT UNSIGNED NOT NULL COMMENT '接收用户',
+    type        TINYINT      NOT NULL COMMENT '类型：1支付成功 2叫号 3报告出具',
+    title       VARCHAR(64)  NOT NULL COMMENT '标题',
+    content     VARCHAR(255) NOT NULL COMMENT '正文',
+    read_flag   TINYINT      NOT NULL DEFAULT 0 COMMENT '0未读 1已读',
+    create_time DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (id),
+    KEY idx_user_read (user_id, read_flag, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='站内通知表';

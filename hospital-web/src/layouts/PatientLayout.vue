@@ -2,6 +2,7 @@
 import { RouterView } from 'vue-router'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import NotificationBell from '@/components/NotificationBell.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -23,6 +24,7 @@ function logout() {
         </div>
       </div>
       <div class="patient-account">
+        <NotificationBell />
         <span class="patient-avatar" aria-hidden="true">{{ auth.user?.username?.slice(0, 1) || '患' }}</span>
         <span class="patient-name">{{ auth.user?.username || '患者' }}</span>
         <button class="logout-button" type="button" @click="logout">退出</button>

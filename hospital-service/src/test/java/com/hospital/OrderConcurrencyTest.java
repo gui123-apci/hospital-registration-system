@@ -26,10 +26,14 @@ import com.hospital.mapper.DoctorMapper;
 import com.hospital.mapper.NumberSourceMapper;
 import com.hospital.mapper.OrderMapper;
 import com.hospital.mapper.PatientMapper;
+import com.hospital.common.enums.NotificationType;
+import com.hospital.entity.Notification;
+import com.hospital.mapper.NotificationMapper;
 import com.hospital.mapper.PaymentMapper;
 import com.hospital.mapper.ScheduleMapper;
 import com.hospital.mapper.UserMapper;
 import com.hospital.service.DoctorWorkService;
+import com.hospital.service.NotificationService;
 import com.hospital.service.OrderService;
 import com.hospital.service.PaymentService;
 import com.hospital.vo.order.OrderVO;
@@ -77,6 +81,8 @@ class OrderConcurrencyTest {
     @Autowired private NumberSourceMapper numberSourceMapper;
     @Autowired private OrderMapper orderMapper;
     @Autowired private PaymentMapper paymentMapper;
+    @Autowired private NotificationMapper notificationMapper;
+    @Autowired private NotificationService notificationService;
 
     @Autowired private StringRedisTemplate stringRedisTemplate;
 
@@ -380,6 +386,51 @@ class OrderConcurrencyTest {
         assertThat(orderService.create(good, userId).getId()).isNotNull();
     }
 
+    // ==================== 测试 8：站内通知 ====================
+
+    @Test
+    void paymentAndCallProduceNotifications() {
+        long patientUserId = createUser(0);
+        long patientId = createPatient(patientUserId);
+        long doctorUserId = createUser(2);
+        long departmentId = createDepartment();
+        long doctorId = createDoctor(departmentId, doctorUserId);
+        long scheduleId = createSchedule(doctorId, 3);
+        createNumberSources(scheduleId, 3);
+
+        OrderCreateDTO dto = new OrderCreateDTO();
+        dto.setScheduleId(scheduleId);
+        dto.setPatientId(patientId);
+        orderService.create(dto, patientUserId);
+        long orderId = findActiveOrder(scheduleId, patientId).getId();
+
+        // 支付成功 → 患者收到 1 条"支付成功"通知
+        PayDTO pay = new PayDTO();
+        pay.setOrderId(orderId);
+        paymentService.pay(pay, patientUserId);
+        assertThat(countNotifications(patientUserId, NotificationType.PAY_SUCCESS.getCode())).isEqualTo(1);
+
+        // 签到 + 叫号 → 第 2 条"医生叫号"通知，未读数变 2
+        orderMapper.update(null, new LambdaUpdateWrapper<Order>()
+                .eq(Order::getId, orderId)
+                .set(Order::getSignTime, java.time.LocalDateTime.now()));
+        doctorWorkService.callNext(scheduleId, doctorUserId);
+        assertThat(countNotifications(patientUserId, null)).isEqualTo(2);
+        assertThat(countNotifications(patientUserId, NotificationType.CALL_NUMBER.getCode())).isEqualTo(1);
+        assertThat(notificationService.unreadCount(patientUserId)).isEqualTo(2);
+
+        // 全部已读后未读数清零
+        notificationService.markAllRead(patientUserId);
+        assertThat(notificationService.unreadCount(patientUserId)).isZero();
+    }
+
+    /** 统计某用户的通知数；type 为 null 时统计全部 */
+    private long countNotifications(long userId, Integer type) {
+        return notificationMapper.selectCount(new LambdaQueryWrapper<Notification>()
+                .eq(Notification::getUserId, userId)
+                .eq(type != null, Notification::getType, type));
+    }
+
     // ==================== 数据构造 ====================
 
     private long createUser(int role) {
@@ -530,7 +581,12 @@ class OrderConcurrencyTest {
         if (!doctorIds.isEmpty()) doctorMapper.deleteBatchIds(doctorIds);
         if (!patientIds.isEmpty()) patientMapper.deleteBatchIds(patientIds);
         if (!departmentIds.isEmpty()) departmentMapper.deleteBatchIds(departmentIds);
-        if (!userIds.isEmpty()) userMapper.deleteBatchIds(userIds);
+        // 通知挂在 userId 上，必须在删用户前清掉
+        if (!userIds.isEmpty()) {
+            notificationMapper.delete(new LambdaQueryWrapper<Notification>()
+                    .in(Notification::getUserId, userIds));
+            userMapper.deleteBatchIds(userIds);
+        }
         // 清 Redis 库存 key，避免跨测试/跨轮次残留脏库存
         scheduleIds.forEach(id -> stringRedisTemplate.delete(RedisKeyConstants.STOCK_PREFIX + id));
     }

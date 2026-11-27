@@ -2,17 +2,20 @@ package com.hospital.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.hospital.common.enums.NotificationType;
 import com.hospital.common.enums.OrderStatus;
 import com.hospital.common.enums.SourceStatus;
 import com.hospital.common.exception.BusinessException;
 import com.hospital.common.result.ResultCode;
 import com.hospital.dto.report.ReportCreateDTO;
+import com.hospital.entity.Department;
 import com.hospital.entity.Doctor;
 import com.hospital.entity.NumberSource;
 import com.hospital.entity.Order;
 import com.hospital.entity.Patient;
 import com.hospital.entity.Report;
 import com.hospital.entity.Schedule;
+import com.hospital.mapper.DepartmentMapper;
 import com.hospital.mapper.DoctorMapper;
 import com.hospital.mapper.NumberSourceMapper;
 import com.hospital.mapper.OrderMapper;
@@ -20,6 +23,7 @@ import com.hospital.mapper.PatientMapper;
 import com.hospital.mapper.ReportMapper;
 import com.hospital.mapper.ScheduleMapper;
 import com.hospital.service.DoctorWorkService;
+import com.hospital.service.NotificationService;
 import com.hospital.util.SlotTimeUtil;
 import com.hospital.vo.doctor.WaitingVO;
 import com.hospital.vo.order.OrderVO;
@@ -56,6 +60,8 @@ public class DoctorWorkServiceImpl implements DoctorWorkService {
     private final NumberSourceMapper numberSourceMapper;
     private final PatientMapper patientMapper;
     private final ReportMapper reportMapper;
+    private final DepartmentMapper departmentMapper;
+    private final NotificationService notificationService;
 
     /**
      * 医生归属校验：账号 → tb_doctor.user_id → 医生 → 排班.doctor_id。
@@ -172,6 +178,13 @@ public class DoctorWorkServiceImpl implements DoctorWorkService {
 
         Patient patient = patientMapper.selectById(next.getPatientId());
         next.setStatus(OrderStatus.IN_PROGRESS.getCode());
+
+        // 站内通知：患者端铃铛角标 +1，提醒尽快进诊室
+        Department department = departmentMapper.selectById(schedule.getDepartmentId());
+        String deptName = department == null ? "对应科室" : department.getName();
+        notificationService.send(next.getUserId(), NotificationType.CALL_NUMBER, "医生已叫号",
+                patient.getName() + " 您好，请到" + deptName + "就诊。");
+
         return OrderVO.from(next, patient, schedule);
     }
 

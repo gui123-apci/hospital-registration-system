@@ -3,6 +3,7 @@ package com.hospital.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.hospital.common.enums.OrderStatus;
+import com.hospital.common.enums.NotificationType;
 import com.hospital.common.enums.PaymentChannel;
 import com.hospital.common.enums.PaymentStatus;
 import com.hospital.common.enums.SourceStatus;
@@ -18,6 +19,7 @@ import com.hospital.mapper.NumberSourceMapper;
 import com.hospital.mapper.OrderMapper;
 import com.hospital.mapper.PaymentMapper;
 import com.hospital.mapper.ScheduleMapper;
+import com.hospital.service.NotificationService;
 import com.hospital.service.PaymentService;
 import com.hospital.util.SlotTimeUtil;
 import com.hospital.util.StockCacheUtil;
@@ -45,6 +47,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final NumberSourceMapper numberSourceMapper;
     private final ScheduleMapper scheduleMapper;
     private final StringRedisTemplate stringRedisTemplate;
+    private final NotificationService notificationService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -106,6 +109,10 @@ public class PaymentServiceImpl implements PaymentService {
         paymentMapper.insert(payment);
 
         log.info("支付成功, orderId={}, amount={}", order.getId(), order.getAmount());
+
+        // 站内通知：提醒按时就诊。发送失败不影响支付（Service 内部已吞异常）
+        notificationService.send(order.getUserId(), NotificationType.PAY_SUCCESS, "支付成功",
+                "挂号费 ¥" + order.getAmount() + " 已支付，请于就诊当天到院签到候诊。");
     }
 
     @Override
