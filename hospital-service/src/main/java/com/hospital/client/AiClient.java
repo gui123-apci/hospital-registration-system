@@ -2,9 +2,16 @@ package com.hospital.client;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 大模型客户端，基于 Spring AI 的 ChatClient 封装 DeepSeek。
@@ -46,6 +53,28 @@ public class AiClient {
         } catch (Exception e) {
             // 网络超时、401、5xx、响应解析失败都走这里，交给上层做优雅降级
             log.warn("AI 导诊调用失败, cause={}", e.getMessage());
+            throw new IllegalStateException("AI 调用失败", e);
+        }
+    }
+
+    /**
+     * 多轮对话入口：history 是历史消息（用户/助手交替），最后一条 userPrompt 是本轮问题。
+     * 历史消息让模型有上下文记忆，比如用户先问"咳嗽挂什么科"，再问"有专家号吗"，
+     * 模型知道"专家号"指的是呼吸内科的专家号。
+     */
+    public String chatWithHistory(String systemPrompt, List<Message> history, String userPrompt) {
+        try {
+            List<Message> messages = new ArrayList<>();
+            messages.add(new SystemMessage(systemPrompt));
+            messages.addAll(history);
+            messages.add(new UserMessage(userPrompt));
+            String text = chatClient.prompt()
+                    .messages(messages)
+                    .call()
+                    .content();
+            return text == null ? "" : text;
+        } catch (Exception e) {
+            log.warn("AI 导诊调用失败(带历史), cause={}", e.getMessage());
             throw new IllegalStateException("AI 调用失败", e);
         }
     }

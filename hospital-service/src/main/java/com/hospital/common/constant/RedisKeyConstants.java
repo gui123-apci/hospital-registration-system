@@ -24,6 +24,15 @@ public final class RedisKeyConstants {
     /** 导诊限流窗口：同一用户 5 秒内只允许一次，防连点/刷新重复调模型 */
     public static final Duration TRIAGE_LOCK_TTL = Duration.ofSeconds(5);
 
+    /** AI 会话记忆 key 前缀，拼 userId：triage:history:{userId} */
+    public static final String TRIAGE_HISTORY_PREFIX = "triage:history:";
+
+    /** 会话记忆存活时间：2 小时无操作自动清除 */
+    public static final Duration TRIAGE_HISTORY_TTL = Duration.ofHours(2);
+
+    /** 会话记忆最大轮数：只保留最近 10 轮（20 条消息），防止上下文过长 */
+    public static final int TRIAGE_HISTORY_MAX_ROUNDS = 10;
+
     private RedisKeyConstants() {
     }
 }

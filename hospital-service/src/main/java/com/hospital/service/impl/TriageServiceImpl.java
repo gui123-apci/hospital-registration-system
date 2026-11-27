@@ -1,5 +1,6 @@
 package com.hospital.service.impl;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hospital.client.AiClient;
 import com.hospital.client.TriageScheduleHolder;
 import com.hospital.common.constant.RedisKeyConstants;
@@ -11,21 +12,21 @@ import com.hospital.vo.triage.TriageScheduleVO;
 import com.hospital.vo.triage.TriageVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * AI 导诊实现（Agent 版）。
+ * AI 导诊实现（Agent 版 + 会话记忆）。
  *
- * 流程只有两步：限流（防连点烧钱）→ 调 Agent（模型自己决定查科室/医生/号源）。
+ * 流程：限流 → 读 Redis 历史 → 调 Agent（带历史上下文）→ 写 Redis 历史。
  * 模型挂掉时优雅降级——给一句友好提示，而不是报 500。
- *
- * 和单轮问答版的核心区别：不再有"回库校验 + 关键词兜底"。
- * 单轮版要靠回库校验防模型编科室名，靠关键词兜底保底；
- * Agent 版把"查科室"本身做成工具，模型查出来的就是库里真实数据，天然不会编。
  */
 @Slf4j
 @Service
@@ -47,29 +48,26 @@ public class TriageServiceImpl implements TriageService {
     private final AiClient aiClient;
     private final StringRedisTemplate stringRedisTemplate;
     private final TriageScheduleHolder scheduleHolder;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
     public TriageVO ask(TriageAskDTO dto, Long userId) {
         String symptoms = dto.getSymptoms().trim();
 
-        // 限流：同一用户 5 秒内只放一个。Agent 一次回答要调好几次模型，比单轮更烧钱，
-        // 连点/刷新会成倍消耗，所以限流比原来更重要
         if (isRateLimited(userId)) {
             throw new BusinessException(ResultCode.TRIAGE_TOO_FREQUENT);
         }
 
-        // 防御：上一次异常没清干净的号源残留先清掉，避免串到本次回答
         scheduleHolder.clear();
         try {
-            String answer = aiClient.chat(SYSTEM_PROMPT, symptoms);
-            // take() 一次性消费工具执行时暂存的号源，随后 answer 一起返回
+            List<Message> history = getHistory(userId);
+            String answer = aiClient.chatWithHistory(SYSTEM_PROMPT, history, symptoms);
+            saveHistory(userId, symptoms, answer);
             return TriageVO.of(answer, scheduleHolder.take());
         } catch (Exception e) {
-            // 优雅降级：模型挂了不报 500，给一句友好提示。导诊是增值功能，不该拖垮患者体验
             log.warn("AI 导诊失败，优雅降级: {}", e.getMessage());
             return TriageVO.of(DEGRADE_ANSWER, List.of());
         } finally {
-            // 双保险：成功路径 take 已清，失败路径靠这里兜底，确保线程池复用不串数据
             scheduleHolder.clear();
         }
     }
@@ -84,7 +82,6 @@ public class TriageServiceImpl implements TriageService {
         return aiClient.chatStream(SYSTEM_PROMPT, symptoms)
                 .doOnError(e -> log.warn("AI 流式导诊失败: {}", e.getMessage()))
                 .onErrorResume(e -> Flux.just(DEGRADE_ANSWER))
-                // 流末尾追加号源数据，前端解析 [SCHEDULES] 前缀获取结构化号源
                 .concatWith(Flux.defer(() -> {
                     List<TriageScheduleVO> schedules = scheduleHolder.take();
                     if (schedules.isEmpty()) {
@@ -95,9 +92,53 @@ public class TriageServiceImpl implements TriageService {
                 .doFinally(signal -> scheduleHolder.clear());
     }
 
+    /** 从 Redis 读历史消息，转成 Spring AI Message 列表 */
+    private List<Message> getHistory(Long userId) {
+        String key = RedisKeyConstants.TRIAGE_HISTORY_PREFIX + userId;
+        try {
+            List<String> raw = stringRedisTemplate.opsForList().range(key, 0, -1);
+            if (raw == null || raw.isEmpty()) {
+                return List.of();
+            }
+            List<Message> messages = new ArrayList<>();
+            for (String json : raw) {
+                HistoryMessage msg = objectMapper.readValue(json, HistoryMessage.class);
+                if ("user".equals(msg.role)) {
+                    messages.add(new UserMessage(msg.content));
+                } else if ("assistant".equals(msg.role)) {
+                    messages.add(new AssistantMessage(msg.content));
+                }
+            }
+            return messages;
+        } catch (Exception e) {
+            log.warn("读取会话记忆失败，按无历史处理: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    /** 把本轮问答写入 Redis List，保留最近 N 轮 */
+    private void saveHistory(Long userId, String userMessage, String assistantMessage) {
+        String key = RedisKeyConstants.TRIAGE_HISTORY_PREFIX + userId;
+        try {
+            stringRedisTemplate.opsForList().rightPush(key,
+                    objectMapper.writeValueAsString(new HistoryMessage("user", userMessage)));
+            stringRedisTemplate.opsForList().rightPush(key,
+                    objectMapper.writeValueAsString(new HistoryMessage("assistant", assistantMessage)));
+            // 只保留最近 N 轮（2N 条消息），截断旧消息
+            long size = stringRedisTemplate.opsForList().size(key);
+            int maxMessages = RedisKeyConstants.TRIAGE_HISTORY_MAX_ROUNDS * 2;
+            if (size > maxMessages) {
+                stringRedisTemplate.opsForList().trim(key, size - maxMessages, -1);
+            }
+            stringRedisTemplate.expire(key, RedisKeyConstants.TRIAGE_HISTORY_TTL);
+        } catch (Exception e) {
+            log.warn("写入会话记忆失败: {}", e.getMessage());
+        }
+    }
+
     private String toJson(List<TriageScheduleVO> schedules) {
         try {
-            return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(schedules);
+            return objectMapper.writeValueAsString(schedules);
         } catch (Exception e) {
             log.warn("号源序列化失败: {}", e.getMessage());
             return "[]";
@@ -114,6 +155,20 @@ public class TriageServiceImpl implements TriageService {
         } catch (Exception e) {
             log.warn("导诊限流检查失败，跳过限流: {}", e.getMessage());
             return false;
+        }
+    }
+
+    /** Redis 里存的历史消息格式 */
+    private static class HistoryMessage {
+        public String role;
+        public String content;
+
+        public HistoryMessage() {
+        }
+
+        public HistoryMessage(String role, String content) {
+            this.role = role;
+            this.content = content;
         }
     }
 }
